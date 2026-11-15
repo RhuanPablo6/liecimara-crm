@@ -17,14 +17,17 @@ const PROCEDURES: [string, number | null][] = [
 ];
 
 async function main() {
-  const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@clinica.local').toLowerCase();
-  const password = process.env.SEED_ADMIN_PASSWORD;
+  const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@clinica.local').trim().toLowerCase();
+  const password = process.env.SEED_ADMIN_PASSWORD?.trim();
   if (!password || password.length < 10) throw new Error('Defina SEED_ADMIN_PASSWORD com ao menos 10 caracteres');
 
+  // As variáveis são a fonte da verdade do administrador inicial: a cada deploy
+  // a senha é sincronizada e o acesso reativado (útil para recuperar o acesso).
+  const passwordHash = await hashPassword(password);
   await prisma.user.upsert({
     where: { email },
-    create: { email, name: 'Administrador', role: 'ADMIN', passwordHash: await hashPassword(password) },
-    update: {},
+    create: { email, name: 'Administrador', role: 'ADMIN', passwordHash },
+    update: { passwordHash, role: 'ADMIN', active: true },
   });
 
   for (const [name, price] of PROCEDURES) {
