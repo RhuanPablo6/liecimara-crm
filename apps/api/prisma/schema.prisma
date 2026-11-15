@@ -507,6 +507,8 @@ model Job {
 
 model SupplyPurchase {
   id            String   @id @default(cuid())
+  /// SUPPLY = compra de insumos · RENTAL = aluguel de aparelho (Ultraformer, Lavieen...)
+  kind          String   @default("SUPPLY")
   purchasedAt   DateTime
   supplier      String?
   /// [{ name, quantity }]

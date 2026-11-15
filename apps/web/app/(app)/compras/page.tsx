@@ -37,8 +37,55 @@ interface FormItem {
 
 const emptyItem = (): FormItem => ({ name: '', quantity: '', procedureId: '', amount: '' });
 
+type Kind = 'SUPPLY' | 'RENTAL';
+
+/** Textos de cada tipo: insumos comprados ou aluguel de aparelho (Ultraformer, Lavieen...). */
+const COPY = {
+  SUPPLY: {
+    newTitle: 'Nova compra de insumos',
+    editTitle: 'Editar compra',
+    date: 'Data da compra',
+    supplier: 'Fornecedor (opcional)',
+    supplierPh: 'ex.: Dental Cremer',
+    items: 'Materiais comprados',
+    help: 'Escolha o procedimento em que o material é usado (toxina, preenchimento, bioestimulador…) para ver o custo de cada procedimento no Financeiro. Com um material só, o valor dele é o total da compra.',
+    itemPh: 'Material (ex.: Toxina 100U)',
+    qtyPh: 'Qtd.',
+    addItem: 'Adicionar material',
+    sumLabel: 'Soma dos materiais',
+    total: 'Valor total (R$)',
+    save: 'Salvar compra',
+    column: 'Materiais',
+    count: 'Compras',
+    button: 'Nova compra',
+    empty: 'Nenhuma compra',
+    search: 'Buscar material ou fornecedor',
+  },
+  RENTAL: {
+    newTitle: 'Aluguel de aparelho',
+    editTitle: 'Editar aluguel',
+    date: 'Data do atendimento',
+    supplier: 'Fornecedor do aparelho',
+    supplierPh: 'ex.: locadora do Ultraformer',
+    items: 'Aparelho',
+    help: 'Escolha o procedimento (Ultraformer, Lavieen…): o aluguel entra no custo dele no Financeiro e é comparado com as vendas desse procedimento. Em "Qtd.", anote quantos pacientes foram atendidos.',
+    itemPh: 'Aparelho (ex.: Ultraformer MPT)',
+    qtyPh: 'Pacientes',
+    addItem: 'Adicionar outro aparelho',
+    sumLabel: 'Soma dos aparelhos',
+    total: 'Valor do aluguel (R$)',
+    save: 'Salvar aluguel',
+    column: 'Aparelho',
+    count: 'Aluguéis',
+    button: 'Novo aluguel',
+    empty: 'Nenhum aluguel',
+    search: 'Buscar aparelho ou fornecedor',
+  },
+} as const;
+
 interface Purchase {
   id: string;
+  kind?: Kind;
   purchasedAt: string;
   supplier: string | null;
   items: Item[];
@@ -74,13 +121,16 @@ function PurchaseDialog({
   open,
   onOpenChange,
   purchase,
+  kind,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   purchase: Purchase | null;
+  kind: Kind;
   onSaved: () => Promise<void>;
 }) {
+  const t = COPY[purchase?.kind ?? kind];
   const { data: procedures } = useApi<any[]>('/procedures');
   const [purchasedAt, setPurchasedAt] = useState(purchase ? spDay(purchase.purchasedAt) : spDay());
   const [supplier, setSupplier] = useState(purchase?.supplier ?? '');
@@ -115,36 +165,33 @@ function PurchaseDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{purchase ? 'Editar compra' : 'Nova compra de insumos'}</DialogTitle>
+          <DialogTitle>{purchase ? t.editTitle : t.newTitle}</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Data da compra">
+          <Field label={t.date}>
             <Input type="date" value={purchasedAt} max={spDay()} onChange={(e) => setPurchasedAt(e.target.value)} />
           </Field>
-          <Field label="Fornecedor (opcional)">
-            <Input placeholder="ex.: Dental Cremer" value={supplier} onChange={(e) => setSupplier(e.target.value)} />
+          <Field label={t.supplier}>
+            <Input placeholder={t.supplierPh} value={supplier} onChange={(e) => setSupplier(e.target.value)} />
           </Field>
         </div>
 
         <div className="space-y-2">
-          <Field label="Materiais comprados">
-            <p className="text-xs text-muted-foreground">
-              Escolha o procedimento em que o material é usado (toxina, preenchimento, bioestimulador…) para ver o custo de cada procedimento no
-              Financeiro. Com um material só, o valor dele é o total da compra.
-            </p>
+          <Field label={t.items}>
+            <p className="text-xs text-muted-foreground">{t.help}</p>
             <div className="space-y-2">
               {items.map((it, idx) => (
                 <div key={idx} className="grid grid-cols-[1fr_5.5rem_auto] gap-2 sm:grid-cols-[1fr_5.5rem_10rem_7rem_auto]">
                   <Input
                     aria-label={`Material ${idx + 1}`}
-                    placeholder="Material (ex.: Toxina 100U)"
+                    placeholder={t.itemPh}
                     value={it.name}
                     onChange={(e) => setItem(idx, { name: e.target.value })}
                   />
                   <Input
                     aria-label={`Quantidade ${idx + 1}`}
-                    placeholder="Qtd."
+                    placeholder={t.qtyPh}
                     value={it.quantity}
                     onChange={(e) => setItem(idx, { quantity: e.target.value })}
                   />
@@ -185,16 +232,16 @@ function PurchaseDialog({
             </div>
           </Field>
           <Button type="button" size="sm" variant="outline" onClick={() => setItems((cur) => [...cur, emptyItem()])}>
-            <Plus /> Adicionar material
+            <Plus /> {t.addItem}
           </Button>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Valor total (R$)">
+          <Field label={t.total}>
             <Input inputMode="decimal" placeholder="0,00" value={total} onChange={(e) => setTotal(e.target.value)} />
             {itemsSum > 0 && (
               <p className={overTotal ? 'text-xs text-red-700' : 'text-xs text-muted-foreground'}>
-                Soma dos materiais: {brl(itemsSum)}
+                {t.sumLabel}: {brl(itemsSum)}
                 {overTotal ? ' (maior que o total)' : ''}
                 {itemsSum !== totalCents && (
                   <button type="button" className="ml-2 text-navy-600 underline" onClick={() => setTotal(centsToInput(itemsSum))}>
@@ -241,6 +288,7 @@ function PurchaseDialog({
           onClick={() =>
             run(async () => {
               const body = {
+                kind: purchase?.kind ?? kind,
                 purchasedAt,
                 supplier: supplier || null,
                 items: filled.map((i) => ({
@@ -261,7 +309,7 @@ function PurchaseDialog({
             })
           }
         >
-          {purchase ? 'Salvar alterações' : 'Salvar compra'}
+          {purchase ? 'Salvar alterações' : t.save}
         </Button>
       </DialogContent>
     </Dialog>
@@ -314,6 +362,8 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 export default function PurchasesPage() {
   const { data: procedures } = useApi<any[]>('/procedures');
   const procName = (id?: string | null) => (id ? procedures?.find((p) => p.id === id)?.name : null);
+  const [kind, setKind] = useState<Kind>('SUPPLY');
+  const t = COPY[kind];
   const [scope, setScope] = useState<'month' | 'all'>('month');
   const [month, setMonth] = useState(spDay().slice(0, 7));
   const [search, setSearch] = useState('');
@@ -322,10 +372,10 @@ export default function PurchasesPage() {
   const [dialogKey, setDialogKey] = useState(0);
 
   const path = useMemo(() => {
-    if (scope === 'all' || !month) return '/purchases';
+    if (scope === 'all' || !month) return `/purchases?kind=${kind}`;
     const { from, to } = monthBounds(month);
-    return `/purchases?from=${from}&to=${to}`;
-  }, [scope, month]);
+    return `/purchases?kind=${kind}&from=${from}&to=${to}`;
+  }, [scope, month, kind]);
   const { data, error, reload } = useApi<ListResponse>(path);
 
   const rows = useMemo(() => {
@@ -349,14 +399,39 @@ export default function PurchasesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-navy-800">Compras de insumos</h1>
+          <h1 className="text-3xl font-semibold text-navy-800">Compras e aluguéis</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Histórico do que a clínica comprou: materiais, valor, data e como foi pago.
+            Insumos comprados e aluguel de aparelhos (Ultraformer, Lavieen…): valor, data, procedimento e como foi pago.
           </p>
         </div>
         <Button variant="gold" onClick={() => openDialog(null)}>
-          <Plus /> Nova compra
+          <Plus /> {t.button}
         </Button>
+      </div>
+
+      <div className="inline-flex rounded-lg bg-secondary p-1" role="tablist" aria-label="Tipo">
+        {(
+          [
+            ['SUPPLY', 'Insumos'],
+            ['RENTAL', 'Aluguel de aparelhos'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={kind === k}
+            onClick={() => {
+              setKind(k);
+              setSearch('');
+            }}
+            className={
+              'rounded-md px-4 py-1.5 text-sm font-medium transition-colors ' +
+              (kind === k ? 'bg-background text-navy-800 shadow' : 'text-muted-foreground hover:text-navy-700')
+            }
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -369,7 +444,7 @@ export default function PurchasesPage() {
         )}
         <Input
           className="max-w-xs"
-          placeholder="Buscar material ou fornecedor"
+          placeholder={t.search}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -377,7 +452,7 @@ export default function PurchasesPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Total gasto" value={brl(s?.totalCents ?? 0)} hint={periodLabel} />
-        <Stat label="Compras" value={String(s?.count ?? 0)} />
+        <Stat label={t.count} value={String(s?.count ?? 0)} />
         <Stat label="À vista" value={brl(s?.cashCents ?? 0)} />
         <Stat label="Parcelado" value={brl(s?.installmentCents ?? 0)} />
       </div>
@@ -392,7 +467,7 @@ export default function PurchasesPage() {
           {!data && !error && <p className="text-sm text-muted-foreground">Carregando…</p>}
           {data && rows.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              Nenhuma compra {search ? 'encontrada' : 'registrada neste período'}. Use <b>Nova compra</b> para lançar a primeira.
+              {search ? 'Nada encontrado.' : <>{t.empty} neste período. Use <b>{t.button}</b> para lançar.</>}
             </p>
           )}
           {rows.length > 0 && (
@@ -401,7 +476,7 @@ export default function PurchasesPage() {
                 <THead>
                   <TR>
                     <TH>Data</TH>
-                    <TH>Materiais</TH>
+                    <TH>{t.column}</TH>
                     <TH>Pagamento</TH>
                     <TH className="text-right">Valor</TH>
                     <TH className="w-28" />
@@ -457,7 +532,7 @@ export default function PurchasesPage() {
         </CardContent>
       </Card>
 
-      <PurchaseDialog key={dialogKey} open={dialogOpen} onOpenChange={setDialogOpen} purchase={editing} onSaved={reload} />
+      <PurchaseDialog key={dialogKey} open={dialogOpen} onOpenChange={setDialogOpen} purchase={editing} kind={kind} onSaved={reload} />
     </div>
   );
 }

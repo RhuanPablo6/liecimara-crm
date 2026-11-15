@@ -4,10 +4,11 @@
 //  - Faturamento = vendas ativas pela data da venda (valor digitado na venda).
 //  - Recebido    = pagamentos registrados pela data do pagamento.
 //  - Insumos     = compras de insumos pela data da compra (não pelo consumo).
+//  - Aluguel     = aluguel de aparelhos (Ultraformer, Lavieen...) pela data do atendimento.
 //  - Anúncios    = gasto diário da Meta; vai para o procedimento ligado ao anúncio.
 //  - Despesas    = despesas da clínica (aluguel, energia...) pela data.
-//  - Resultado   = faturamento − insumos − anúncios − despesas.
-//  - Por procedimento: margem de contribuição = faturamento − insumos − anúncios do procedimento.
+//  - Resultado   = faturamento − insumos − aluguel − anúncios − despesas.
+//  - Por procedimento: margem de contribuição = faturamento − insumos − aluguel − anúncios do procedimento.
 
 import type { Repos } from '../../ports/repositories.js';
 import { addDays, dayRange, daysBetween, mondayOf, spDay } from '../../shared/days.js';
@@ -25,6 +26,7 @@ export interface ProcedureRow {
   revenueCents: number;
   avgTicketCents: number | null;
   suppliesCents: number;
+  rentalCents: number;
   adSpendCents: number;
   contributionCents: number;
   marginPct: number | null;
@@ -36,6 +38,7 @@ export interface SeriesPoint {
   label: string;
   revenueCents: number;
   suppliesCents: number;
+  rentalCents: number;
   adSpendCents: number;
   expensesCents: number;
   profitCents: number;
@@ -51,6 +54,7 @@ export interface FinanceReport {
     salesCount: number;
     appointments: number;
     suppliesCents: number;
+    rentalCents: number;
     adSpendCents: number;
     expensesCents: number;
     expensesPendingCents: number;
@@ -142,7 +146,7 @@ export class FinanceService {
     const series = new Map<string, SeriesPoint>(
       keys.map((k) => [
         k,
-        { key: k, label: bucketLabel(k, granularity, from), revenueCents: 0, suppliesCents: 0, adSpendCents: 0, expensesCents: 0, profitCents: 0 },
+        { key: k, label: bucketLabel(k, granularity, from), revenueCents: 0, suppliesCents: 0, rentalCents: 0, adSpendCents: 0, expensesCents: 0, profitCents: 0 },
       ]),
     );
     const point = (day: string) => series.get(bucketOf(day, granularity));
@@ -150,6 +154,7 @@ export class FinanceService {
     const revenue = new Map<string, number>();
     const salesCount = new Map<string, number>();
     const supplies = new Map<string, number>();
+    const rental = new Map<string, number>();
     const adSpend = new Map<string, number>();
     const appts = new Map<string, number>();
     const attended = new Map<string, number>();
@@ -185,12 +190,19 @@ export class FinanceService {
     }
 
     let suppliesCents = 0;
+    let rentalCents = 0;
     for (const p of purchases) {
       const day = spDay(p.purchasedAt);
       if (!inPeriod(day)) continue;
-      suppliesCents += p.totalCents;
-      point(day)!.suppliesCents += p.totalCents;
-      for (const [k, v] of allocatePurchase(p)) add(supplies, k, v);
+      const isRental = p.kind === 'RENTAL';
+      if (isRental) {
+        rentalCents += p.totalCents;
+        point(day)!.rentalCents += p.totalCents;
+      } else {
+        suppliesCents += p.totalCents;
+        point(day)!.suppliesCents += p.totalCents;
+      }
+      for (const [k, v] of allocatePurchase(p)) add(isRental ? rental : supplies, k, v);
     }
 
     const adProcedure = new Map(ads.map((a) => [a.metaId, a.procedureId ?? null]));
@@ -217,14 +229,15 @@ export class FinanceService {
       byCategory.set(e.category, c);
     }
 
-    for (const p of series.values()) p.profitCents = p.revenueCents - p.suppliesCents - p.adSpendCents - p.expensesCents;
+    for (const p of series.values()) p.profitCents = p.revenueCents - p.suppliesCents - p.rentalCents - p.adSpendCents - p.expensesCents;
 
     const row = (procedureId: string, name: string): ProcedureRow => {
       const rev = revenue.get(procedureId) ?? 0;
       const sup = supplies.get(procedureId) ?? 0;
+      const rent = rental.get(procedureId) ?? 0;
       const ad = adSpend.get(procedureId) ?? 0;
       const n = salesCount.get(procedureId) ?? 0;
-      const contribution = rev - sup - ad;
+      const contribution = rev - sup - rent - ad;
       return {
         procedureId,
         name,
@@ -234,6 +247,7 @@ export class FinanceService {
         revenueCents: rev,
         avgTicketCents: n ? Math.round(rev / n) : null,
         suppliesCents: sup,
+        rentalCents: rent,
         adSpendCents: ad,
         contributionCents: contribution,
         marginPct: pct(contribution, rev),
@@ -243,9 +257,9 @@ export class FinanceService {
     const known = new Set(procedures.map((p) => p.id));
     const byProcedure = procedures
       .map((p) => row(p.id, p.name))
-      .filter((r, idx) => procedures[idx]?.active || r.revenueCents || r.suppliesCents || r.adSpendCents || r.appointments);
+      .filter((r, idx) => procedures[idx]?.active || r.revenueCents || r.suppliesCents || r.rentalCents || r.adSpendCents || r.appointments);
     // Procedimentos apagados/desconhecidos entram como "sem procedimento".
-    for (const m of [revenue, salesCount, supplies, adSpend, appts, attended]) {
+    for (const m of [revenue, salesCount, supplies, rental, adSpend, appts, attended]) {
       for (const [k, v] of [...m]) {
         if (k !== NO_PROCEDURE && !known.has(k)) {
           m.delete(k);
@@ -254,12 +268,12 @@ export class FinanceService {
       }
     }
     const none = row(NO_PROCEDURE, 'Sem procedimento definido');
-    if (none.revenueCents || none.suppliesCents || none.adSpendCents || none.appointments) byProcedure.push(none);
+    if (none.revenueCents || none.suppliesCents || none.rentalCents || none.adSpendCents || none.appointments) byProcedure.push(none);
     byProcedure.sort((a, b) =>
       a.procedureId === NO_PROCEDURE ? 1 : b.procedureId === NO_PROCEDURE ? -1 : b.revenueCents - a.revenueCents || a.name.localeCompare(b.name, 'pt-BR'),
     );
 
-    const costsCents = suppliesCents + adSpendCents + expensesCents;
+    const costsCents = suppliesCents + rentalCents + adSpendCents + expensesCents;
     const profitCents = revenueCents - costsCents;
     return {
       from,
@@ -271,6 +285,7 @@ export class FinanceService {
         salesCount: nSales,
         appointments: nAppointments,
         suppliesCents,
+        rentalCents,
         adSpendCents,
         expensesCents,
         expensesPendingCents,

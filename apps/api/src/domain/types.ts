@@ -215,8 +215,12 @@ export interface SupplyItem {
 }
 
 /** Compra de insumos/materiais da clínica. */
+export type SupplyKind = 'SUPPLY' | 'RENTAL';
+
 export interface SupplyPurchase {
   id: string;
+  /** SUPPLY = insumos; RENTAL = aluguel de aparelho pago ao fornecedor. */
+  kind: SupplyKind;
   purchasedAt: Date;
   supplier: string | null;
   items: SupplyItem[];

@@ -26,6 +26,7 @@ const itemSchema = z.object({
 
 const purchaseSchema = z
   .object({
+  kind: z.enum(['SUPPLY', 'RENTAL']).default('SUPPLY'),
   purchasedAt: day,
   supplier: optionalText(200),
   items: z.array(itemSchema).min(1, 'Informe ao menos um material').max(100),
@@ -58,9 +59,9 @@ export function summarize(list: SupplyPurchase[]) {
 export function registerPurchaseRoutes(app: FastifyInstance, c: Container, guard: Guard) {
   /** Lista as compras. ?from=AAAA-MM-DD&to=AAAA-MM-DD (to inclusivo). Sem período = todas. */
   app.get('/purchases', { preHandler: guard('purchases:read') }, async (req) => {
-    const q = z.object({ from: day.optional(), to: day.optional() }).parse(req.query);
+    const q = z.object({ from: day.optional(), to: day.optional(), kind: z.enum(['SUPPLY', 'RENTAL']).optional() }).parse(req.query);
     const range = q.from || q.to ? dayRange(q.from ?? '2000-01-01', q.to ?? '2999-12-31') : undefined;
-    const items = await c.repos.purchases.list(range);
+    const items = (await c.repos.purchases.list(range)).filter((p) => !q.kind || (p.kind ?? 'SUPPLY') === q.kind);
     return { items, summary: summarize(items) };
   });
 
@@ -75,7 +76,9 @@ export function registerPurchaseRoutes(app: FastifyInstance, c: Container, guard
     const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
     const b = purchaseSchema.parse(req.body);
     const before = await c.repos.purchases.findById(id);
-    const p = await c.repos.purchases.update(id, toData(b));
+    // Sem "kind" no corpo, mantém o tipo atual (insumo ou aluguel).
+    const kind = (req.body as { kind?: string } | null)?.kind ? b.kind : (before?.kind ?? b.kind);
+    const p = await c.repos.purchases.update(id, { ...toData(b), kind });
     await c.audit.record({ userId: req.user!.sub, action: 'purchase.update', entityType: 'SupplyPurchase', entityId: id, before, after: p, ip: req.ip });
     return p;
   });

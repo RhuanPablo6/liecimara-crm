@@ -158,7 +158,7 @@ export interface PaymentRepo {
 }
 
 export interface SupplyPurchaseRepo {
-  create(data: Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt'>): Promise<SupplyPurchase>;
+  create(data: Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt' | 'kind'> & { kind?: SupplyPurchase['kind'] }): Promise<SupplyPurchase>;
   update(id: string, data: Partial<Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt'>>): Promise<SupplyPurchase>;
   delete(id: string): Promise<void>;
   findById(id: string): Promise<SupplyPurchase | null>;

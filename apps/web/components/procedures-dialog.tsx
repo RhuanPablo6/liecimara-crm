@@ -8,7 +8,7 @@ import { ErrorText, Input } from '@/components/ui/form';
 import { api, useAction, useApi } from '@/lib/api';
 import { parseBRL } from '@/lib/format';
 
-const SUGGESTIONS = ['Toxina botulínica', 'Preenchimento', 'Bioestimulador', 'Ultraformer', 'Skinbooster', 'Fios de PDO'];
+const SUGGESTIONS = ['Toxina botulínica', 'Preenchimento', 'Bioestimulador', 'Ultraformer', 'Lavieen', 'Skinbooster', 'Fios de PDO'];
 
 function Row({ p, onSaved }: { p: any; onSaved: () => Promise<void> }) {
   const [name, setName] = useState(p.name);

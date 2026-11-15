@@ -106,6 +106,7 @@ function ChartTooltip({ active, payload, label }: any) {
       {[
         ['Faturamento', p.revenueCents, C_REVENUE],
         ['Insumos', p.suppliesCents, null],
+        ['Aluguel de aparelhos', p.rentalCents, null],
         ['Anúncios', p.adSpendCents, null],
         ['Despesas', p.expensesCents, null],
         ['Custos totais', p.costsCents, C_COSTS],
@@ -136,6 +137,7 @@ function downloadCsv(report: any, procedures: boolean) {
   rows.push(['DRE simplificado', 'R$']);
   rows.push(['Faturamento (vendas)', money(report.totals.revenueCents)]);
   rows.push(['(-) Insumos', money(report.totals.suppliesCents)]);
+  rows.push(['(-) Aluguel de aparelhos', money(report.totals.rentalCents)]);
   rows.push(['(-) Anúncios (Meta)', money(report.totals.adSpendCents)]);
   for (const c of report.expensesByCategory) rows.push([`(-) ${c.category}`, money(c.amountCents)]);
   rows.push(['= Resultado', money(report.totals.profitCents)]);
@@ -143,7 +145,7 @@ function downloadCsv(report: any, procedures: boolean) {
   rows.push(['Recebido no período', money(report.totals.receivedCents)]);
   if (procedures) {
     rows.push([]);
-    rows.push(['Procedimento', 'Agendamentos', 'Vendas', 'Faturamento', 'Ticket médio', 'Insumos', 'Anúncios', 'Margem de contribuição', 'Margem %', 'ROAS']);
+    rows.push(['Procedimento', 'Agendamentos', 'Vendas', 'Faturamento', 'Ticket médio', 'Insumos', 'Aluguel de aparelhos', 'Anúncios', 'Margem de contribuição', 'Margem %', 'ROAS']);
     for (const p of report.byProcedure)
       rows.push([
         p.name,
@@ -152,6 +154,7 @@ function downloadCsv(report: any, procedures: boolean) {
         money(p.revenueCents),
         p.avgTicketCents == null ? '' : money(p.avgTicketCents),
         money(p.suppliesCents),
+        money(p.rentalCents),
         money(p.adSpendCents),
         money(p.contributionCents),
         p.marginPct ?? '',
@@ -159,9 +162,9 @@ function downloadCsv(report: any, procedures: boolean) {
       ]);
   }
   rows.push([]);
-  rows.push(['Período', 'Faturamento', 'Insumos', 'Anúncios', 'Despesas', 'Resultado']);
+  rows.push(['Período', 'Faturamento', 'Insumos', 'Aluguel de aparelhos', 'Anúncios', 'Despesas', 'Resultado']);
   for (const s of report.series)
-    rows.push([s.label, money(s.revenueCents), money(s.suppliesCents), money(s.adSpendCents), money(s.expensesCents), money(s.profitCents)]);
+    rows.push([s.label, money(s.revenueCents), money(s.suppliesCents), money(s.rentalCents), money(s.adSpendCents), money(s.expensesCents), money(s.profitCents)]);
   const csv = '﻿' + rows.map((r) => r.map(esc).join(';')).join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const a = document.createElement('a');
@@ -186,13 +189,13 @@ export default function FinancePage() {
   const { data: procedures } = useApi<any[]>(`/procedures?v=${procVersion}`);
 
   const series = useMemo(
-    () => (r?.series ?? []).map((s: any) => ({ ...s, costsCents: s.suppliesCents + s.adSpendCents + s.expensesCents })),
+    () => (r?.series ?? []).map((s: any) => ({ ...s, costsCents: s.suppliesCents + s.rentalCents + s.adSpendCents + s.expensesCents })),
     [r],
   );
   const t = r?.totals;
   const none = r?.byProcedure.find((p: any) => p.procedureId === '__none__');
   const [showEmpty, setShowEmpty] = useState(false);
-  const isEmpty = (p: any) => !p.revenueCents && !p.suppliesCents && !p.adSpendCents && !p.appointments;
+  const isEmpty = (p: any) => !p.revenueCents && !p.suppliesCents && !p.rentalCents && !p.adSpendCents && !p.appointments;
   const allProcs = (r?.byProcedure ?? []).filter((p: any) => p.procedureId !== '__none__');
   const procs = showEmpty ? allProcs : allProcs.filter((p: any) => !isEmpty(p));
   const hiddenCount = allProcs.length - procs.length;
@@ -288,7 +291,11 @@ export default function FinancePage() {
           hint={t ? `Margem ${pctText(t.marginPct)}` : undefined}
           tone={t ? (t.profitCents >= 0 ? 'good' : 'bad') : undefined}
         />
-        <Kpi label="Insumos" value={brl(t?.suppliesCents ?? 0)} hint={t?.revenueCents ? `${pctText((t.suppliesCents / t.revenueCents) * 100)} do faturamento` : undefined} />
+        <Kpi
+          label="Insumos e aluguel de aparelhos"
+          value={brl((t?.suppliesCents ?? 0) + (t?.rentalCents ?? 0))}
+          hint={t ? `Insumos ${brl(t.suppliesCents)} · Aluguel ${brl(t.rentalCents)}` : undefined}
+        />
         <Kpi label="Anúncios (Meta)" value={brl(t?.adSpendCents ?? 0)} hint={t ? `ROAS ${roasText(t.roas)}` : undefined} />
         <Kpi
           label="Despesas"
@@ -302,7 +309,7 @@ export default function FinancePage() {
           <div>
             <CardTitle>Faturamento × custos</CardTitle>
             <CardDescription>
-              Custos = insumos + anúncios + despesas. Agrupado por {g === 'day' ? 'dia' : g === 'week' ? 'semana' : 'mês'}.
+              Custos = insumos + aluguel de aparelhos + anúncios + despesas. Agrupado por {g === 'day' ? 'dia' : g === 'week' ? 'semana' : 'mês'}.
             </CardDescription>
           </div>
           <Button size="sm" variant="ghost" onClick={() => setShowTable((v) => !v)}>
@@ -335,6 +342,7 @@ export default function FinancePage() {
                     <TH>Período</TH>
                     <TH className="text-right">Faturamento</TH>
                     <TH className="text-right">Insumos</TH>
+                    <TH className="text-right">Aluguel</TH>
                     <TH className="text-right">Anúncios</TH>
                     <TH className="text-right">Despesas</TH>
                     <TH className="text-right">Resultado</TH>
@@ -346,6 +354,7 @@ export default function FinancePage() {
                       <TD>{s.label}</TD>
                       <TD className="text-right tabular-nums">{brl(s.revenueCents)}</TD>
                       <TD className="text-right tabular-nums">{brl(s.suppliesCents)}</TD>
+                      <TD className="text-right tabular-nums">{brl(s.rentalCents)}</TD>
                       <TD className="text-right tabular-nums">{brl(s.adSpendCents)}</TD>
                       <TD className="text-right tabular-nums">{brl(s.expensesCents)}</TD>
                       <TD className={cn('text-right font-medium tabular-nums', s.profitCents < 0 && 'text-red-700')}>{brl(s.profitCents)}</TD>
@@ -362,7 +371,7 @@ export default function FinancePage() {
         <CardHeader>
           <CardTitle>Por procedimento</CardTitle>
           <CardDescription>
-            Margem de contribuição = faturamento − insumos − anúncios do procedimento (antes das despesas fixas). Valores de venda são os digitados em
+            Margem de contribuição = faturamento − insumos − aluguel de aparelho − anúncios do procedimento (antes das despesas fixas). Valores de venda são os digitados em
             cada venda.
           </CardDescription>
         </CardHeader>
@@ -379,6 +388,7 @@ export default function FinancePage() {
                     <TH className="text-right">Faturamento</TH>
                     <TH className="text-right">Ticket médio</TH>
                     <TH className="text-right">Insumos</TH>
+                    <TH className="text-right">Aluguel</TH>
                     <TH className="text-right">Anúncios</TH>
                     <TH className="text-right">Margem contrib.</TH>
                     <TH className="text-right">Margem</TH>
@@ -394,6 +404,7 @@ export default function FinancePage() {
                       <TD className="text-right tabular-nums">{brl(p.revenueCents)}</TD>
                       <TD className="text-right tabular-nums">{p.avgTicketCents == null ? '—' : brl(p.avgTicketCents)}</TD>
                       <TD className="text-right tabular-nums">{brl(p.suppliesCents)}</TD>
+                      <TD className="text-right tabular-nums">{brl(p.rentalCents)}</TD>
                       <TD className="text-right tabular-nums">{brl(p.adSpendCents)}</TD>
                       <TD className={cn('text-right font-medium tabular-nums', p.contributionCents < 0 && 'text-red-700')}>{brl(p.contributionCents)}</TD>
                       <TD className="text-right tabular-nums">{pctText(p.marginPct)}</TD>
@@ -448,12 +459,16 @@ export default function FinancePage() {
                   <dd className="tabular-nums">{brl(t.suppliesCents)}</dd>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
+                  <dt>(−) Aluguel de aparelhos</dt>
+                  <dd className="tabular-nums">{brl(t.rentalCents)}</dd>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
                   <dt>(−) Anúncios (Meta)</dt>
                   <dd className="tabular-nums">{brl(t.adSpendCents)}</dd>
                 </div>
                 <div className="flex justify-between border-t pt-1.5 font-medium">
                   <dt>= Margem de contribuição</dt>
-                  <dd className="tabular-nums">{brl(t.revenueCents - t.suppliesCents - t.adSpendCents)}</dd>
+                  <dd className="tabular-nums">{brl(t.revenueCents - t.suppliesCents - t.rentalCents - t.adSpendCents)}</dd>
                 </div>
                 {r.expensesByCategory.map((c: any) => (
                   <div key={c.category} className="flex justify-between text-muted-foreground">
@@ -507,6 +522,7 @@ export default function FinancePage() {
           <li>Faturamento: vendas registradas nos leads, pela data da venda, com o valor digitado (promoções e pacotes incluídos). Vendas canceladas não contam.</li>
           <li>Recebido: pagamentos lançados nas vendas, pela data do pagamento.</li>
           <li>Insumos: compras pela data da compra (não pelo uso). Cada material vai para o procedimento escolhido; com um material só, o total vai para ele.</li>
+          <li>Aluguel de aparelhos (Ultraformer, Lavieen…): pela data do atendimento, no procedimento escolhido no lançamento.</li>
           <li>Anúncios: gasto diário da Meta, no procedimento ligado a cada anúncio.</li>
           <li>Agendamentos: pela data marcada, sem os cancelados. Sem procedimento no agendamento, vale o procedimento de interesse do lead.</li>
           <li>Despesas: pela data de vencimento/pagamento, pagas ou a pagar.</li>

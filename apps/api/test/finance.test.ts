@@ -121,3 +121,29 @@ describe('Financeiro', () => {
     assert.equal(r.totals.revenueCents, 200000);
   });
 });
+
+describe('Aluguel de aparelhos', () => {
+  it('entra no custo do procedimento e no resultado, separado dos insumos', async () => {
+    const w = buildWorld();
+    const ultra = await seedProcedure(w, 'Ultraformer');
+    const lead = await w.funnel.createLeadManually({ waId: '5511955554444', name: 'Paciente' }, actor);
+    await w.funnel.registerSale(lead.id, { procedureId: ultra.id, amountCents: 300000, soldAt: new Date('2026-11-20T15:00:00Z') }, actor);
+    await w.funnel.registerSale(lead.id, { procedureId: ultra.id, amountCents: 250000, soldAt: new Date('2026-11-20T16:00:00Z') }, actor);
+    await w.repos.purchases.create({
+      ...purchaseBase,
+      kind: 'RENTAL',
+      purchasedAt: dayToDate('2026-11-20'),
+      items: [{ name: 'Aluguel Ultraformer (dia)', quantity: '2 pacientes', procedureId: ultra.id, amountCents: null }],
+      totalCents: 180000,
+    });
+    const r = await w.finance.report('2026-11-01', '2026-11-30', 'month');
+    assert.equal(r.totals.rentalCents, 180000);
+    assert.equal(r.totals.suppliesCents, 0);
+    assert.equal(r.totals.profitCents, 550000 - 180000);
+    const row = r.byProcedure.find((p) => p.procedureId === ultra.id)!;
+    assert.equal(row.rentalCents, 180000);
+    assert.equal(row.suppliesCents, 0);
+    assert.equal(row.contributionCents, 370000);
+    assert.equal(r.series[0]!.rentalCents, 180000);
+  });
+});

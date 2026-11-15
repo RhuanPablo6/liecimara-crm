@@ -329,9 +329,9 @@ export class MemoryRepos implements Repos {
   };
 
   purchases = {
-    create: async (d: Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt'>) => {
+    create: async (d: Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt' | 'kind'> & { kind?: SupplyPurchase['kind'] }) => {
       const now = new Date();
-      return insert(this.s.purchases, { ...d, createdAt: now, updatedAt: now }, 'sup_');
+      return insert(this.s.purchases, { ...d, kind: d.kind ?? 'SUPPLY', createdAt: now, updatedAt: now } as SupplyPurchase, 'sup_');
     },
     update: async (id: string, d: Partial<SupplyPurchase>) => {
       if (!this.s.purchases.has(id)) throw new NotFoundError('Registro de compra', id);
