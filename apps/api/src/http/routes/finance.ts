@@ -5,6 +5,7 @@ import type { Container } from '../../container.js';
 import { DomainError } from '../../domain/errors.js';
 import { CASH_SETTINGS_KEY, DEFAULT_FEE_RULES, FEE_SETTINGS_KEY } from '../../modules/finance/accounts.js';
 import { checkPeriod } from '../../modules/finance/FinanceService.js';
+import { GOALS_SETTINGS_KEY, type GoalsSettings } from '../../modules/finance/goals.js';
 import { addDays, dayRange, daysBetween, dayToDate, isDay, spDay } from '../../shared/days.js';
 import type { Guard } from '../server.js';
 
@@ -323,5 +324,38 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
     await c.repos.settings.set(CASH_SETTINGS_KEY, b);
     await c.audit.record({ userId: req.user!.sub, action: 'finance.cash', entityType: 'Setting', entityId: CASH_SETTINGS_KEY, after: b, ip: req.ip });
     return b;
+  });
+
+  // ── Metas, comparativos e ponto de equilíbrio ──────────────
+  app.get('/finance/overview', { preHandler: guard('finance:read') }, async (req) => {
+    const q = z.object({ month: month.optional() }).parse(req.query);
+    const today = spDay(new Date());
+    return c.goals.overview(q.month ?? today.slice(0, 7), today);
+  });
+
+  app.get('/finance/goals', { preHandler: guard('finance:read') }, async () => c.goals.settings());
+
+  app.put('/finance/goals', { preHandler: guard('finance:write') }, async (req) => {
+    const b = z
+      .object({
+        month,
+        revenueCents: z.number().int().positive().max(10_000_000_00).nullable(),
+        procedures: z.record(z.string().min(1), z.number().int().positive().max(10_000_000_00)).default({}),
+        /** Também vale para os meses sem meta própria. */
+        applyAsDefault: z.boolean().default(false),
+      })
+      .parse(req.body);
+    const before = await c.goals.settings();
+    const goal = { revenueCents: b.revenueCents, procedures: b.procedures };
+    const empty = !b.revenueCents && !Object.keys(b.procedures).length;
+    const months = { ...before.months };
+    if (empty) delete months[b.month];
+    else months[b.month] = goal;
+    const next: GoalsSettings = b.applyAsDefault
+      ? { default: empty ? null : goal, defaultFrom: empty ? null : b.month, months }
+      : { default: before.default, defaultFrom: before.defaultFrom ?? null, months };
+    await c.repos.settings.set(GOALS_SETTINGS_KEY, next);
+    await c.audit.record({ userId: req.user!.sub, action: 'finance.goals', entityType: 'Setting', entityId: GOALS_SETTINGS_KEY, before, after: next, ip: req.ip });
+    return next;
   });
 }

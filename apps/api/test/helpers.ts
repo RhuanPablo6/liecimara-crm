@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { AttributionEngine } from '../src/modules/attribution/AttributionEngine.js';
 import { AccountsService } from '../src/modules/finance/accounts.js';
 import { FinanceService } from '../src/modules/finance/FinanceService.js';
+import { GoalsService } from '../src/modules/finance/goals.js';
 import { FunnelService } from '../src/modules/funnel/FunnelService.js';
 import { MetricsService } from '../src/modules/metrics/MetricsService.js';
 import { MetaSyncService, META_SYNC_JOB } from '../src/modules/meta/MetaSyncService.js';
@@ -46,6 +47,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
   const metrics = new MetricsService(repos);
   const finance = new FinanceService(repos);
   const accounts = new AccountsService(repos);
+  const goals = new GoalsService(repos, finance);
   const metaSync = new MetaSyncService(repos, vault, http, clock, 'HOMOLOG', 'v23.0', engine, 'https://graph.test');
   const integrations = new IntegrationService(repos, vault, http, clock, 'HOMOLOG', {
     graphVersion: 'v23.0',
@@ -69,7 +71,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
     return ingestion.ingest(provider, raw, headers);
   }
 
-  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, finance, accounts, metaSync, integrations, provider, worker, deliver };
+  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, finance, accounts, goals, metaSync, integrations, provider, worker, deliver };
 }
 
 export type World = ReturnType<typeof buildWorld>;

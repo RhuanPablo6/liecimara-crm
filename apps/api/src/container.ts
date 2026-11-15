@@ -10,6 +10,7 @@ import { AuditLogger } from './modules/audit/AuditLogger.js';
 import { AuthService } from './modules/auth/auth.js';
 import { AccountsService } from './modules/finance/accounts.js';
 import { FinanceService } from './modules/finance/FinanceService.js';
+import { GoalsService } from './modules/finance/goals.js';
 import { FunnelService } from './modules/funnel/FunnelService.js';
 import { IntegrationService } from './modules/integrations/IntegrationService.js';
 import { MetaSyncService } from './modules/meta/MetaSyncService.js';
@@ -34,6 +35,7 @@ export function buildContainer(env: Env) {
   const metrics = new MetricsService(repos);
   const finance = new FinanceService(repos);
   const accounts = new AccountsService(repos);
+  const goals = new GoalsService(repos, finance);
   const auth = new AuthService(repos.users, env.JWT_SECRET, env.JWT_TTL_SECONDS);
   const audit = new AuditLogger(repos.audit);
   const ingestion = new WebhookIngestionService(repos, queue, clock, integrationEnv);
@@ -46,7 +48,7 @@ export function buildContainer(env: Env) {
   });
   const metaSync = new MetaSyncService(repos, vault, http, clock, integrationEnv, env.META_GRAPH_VERSION, engine);
 
-  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, auth, audit, ingestion, processor, integrations, metaSync };
+  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, auth, audit, ingestion, processor, integrations, metaSync };
 }
 
 export type Container = ReturnType<typeof buildContainer>;
