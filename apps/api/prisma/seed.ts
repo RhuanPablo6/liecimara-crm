@@ -1,4 +1,4 @@
-// Cria o administrador inicial e o catálogo básico de procedimentos.
+// Cria o administrador inicial e garante o catálogo de procedimentos da clínica.
 // Uso: pnpm --filter @liecimara/api prisma:seed
 import { createPrismaClient } from '../src/infra/prisma/client.js';
 import { hashPassword } from '../src/modules/auth/auth.js';
@@ -6,14 +6,15 @@ import { hashPassword } from '../src/modules/auth/auth.js';
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL não definida');
 const prisma = createPrismaClient(process.env.DATABASE_URL);
 
+// Procedimentos oferecidos pela clínica (preço sugerido é definido no CRM, em Financeiro → Procedimentos).
 const PROCEDURES: [string, number | null][] = [
-  ['Avaliação', null],
-  ['Toxina botulínica', 120000],
-  ['Preenchimento labial', 180000],
-  ['Bioestimulador de colágeno', 250000],
-  ['Limpeza de pele', 25000],
-  ['Peeling', 35000],
-  ['Fios de PDO', 220000],
+  ['Preenchimento', null],
+  ['Botox', null],
+  ['Bioestimulador', null],
+  ['Lavieen', null],
+  ['Ultraformer MPT', null],
+  ['Combo botox + Preenchimento', null],
+  ['Combo botox + Bioestimulador', null],
 ];
 
 async function main() {

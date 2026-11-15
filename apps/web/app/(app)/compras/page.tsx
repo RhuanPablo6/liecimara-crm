@@ -48,7 +48,7 @@ const COPY = {
     supplier: 'Fornecedor (opcional)',
     supplierPh: 'ex.: Dental Cremer',
     items: 'Materiais comprados',
-    help: 'Escolha o procedimento em que o material é usado (toxina, preenchimento, bioestimulador…) para ver o custo de cada procedimento no Financeiro. Com um material só, o valor dele é o total da compra.',
+    help: 'Escolha o procedimento em que o material é usado (Botox, Preenchimento, Bioestimulador…) para ver o custo de cada procedimento no Financeiro. Com um material só, o valor dele é o total da compra.',
     itemPh: 'Material (ex.: Toxina 100U)',
     qtyPh: 'Qtd.',
     addItem: 'Adicionar material',
