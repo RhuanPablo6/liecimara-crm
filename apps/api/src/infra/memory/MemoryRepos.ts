@@ -5,6 +5,7 @@
 import { DomainError, NotFoundError } from '../../domain/errors.js';
 import type {
   Ad,
+  AdAccountInfo,
   AdInsightDaily,
   AdSet,
   Appointment,
@@ -43,6 +44,7 @@ interface State {
   campaigns: Map<string, Campaign>;
   adSets: Map<string, AdSet>;
   ads: Map<string, Ad>;
+  adAccounts: Map<string, AdAccountInfo>;
   insights: Map<string, AdInsightDaily>;
   procedures: Map<string, Procedure>;
   appointments: Map<string, Appointment>;
@@ -70,6 +72,7 @@ const emptyState = (): State => ({
   campaigns: new Map(),
   adSets: new Map(),
   ads: new Map(),
+  adAccounts: new Map(),
   insights: new Map(),
   procedures: new Map(),
   appointments: new Map(),
@@ -267,6 +270,11 @@ export class MemoryRepos implements Repos {
       this.s.ads.set(metaId, { ...ad, code });
       return clone({ ...ad, code });
     },
+    upsertAdAccounts: async (rows: AdAccountInfo[]) => rows.forEach((a) => this.s.adAccounts.set(a.id, clone(a))),
+    listAdAccounts: async () => clone([...this.s.adAccounts.values()]),
+    patchCampaign: async (metaId: string, d: Partial<Campaign>) => void this.s.campaigns.set(metaId, { ...this.s.campaigns.get(metaId)!, ...d }),
+    patchAdSet: async (metaId: string, d: Partial<AdSet>) => void this.s.adSets.set(metaId, { ...this.s.adSets.get(metaId)!, ...d }),
+    patchAd: async (metaId: string, d: Partial<Ad>) => void this.s.ads.set(metaId, { ...this.s.ads.get(metaId)!, ...d }),
     setAdProcedure: async (metaId: string, procedureId: string | null) => {
       const ad = this.s.ads.get(metaId);
       if (!ad) throw new NotFoundError('Anúncio', metaId);

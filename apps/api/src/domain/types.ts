@@ -85,12 +85,29 @@ export interface Campaign {
   name: string;
   status: string | null;
   objective: string | null;
+  accountId?: string | null;
+  /** Veiculação efetiva (ACTIVE, PAUSED, IN_PROCESS, WITH_ISSUES...). */
+  effectiveStatus?: string | null;
+  /** Orçamento da campanha (Advantage+/CBO), em centavos. */
+  dailyBudgetCents?: number | null;
+  lifetimeBudgetCents?: number | null;
+  stopTime?: Date | null;
 }
 export interface AdSet {
   metaId: string;
   campaignMetaId: string;
   name: string;
   status: string | null;
+  effectiveStatus?: string | null;
+  dailyBudgetCents?: number | null;
+  lifetimeBudgetCents?: number | null;
+}
+export interface AdAccountInfo {
+  id: string;
+  name: string;
+  currency: string | null;
+  timezoneName: string | null;
+  status: number | null;
 }
 export interface Ad {
   metaId: string;
@@ -102,6 +119,7 @@ export interface Ad {
   code?: string | null;
   /** Procedimento divulgado pelo anúncio (definido no CRM). */
   procedureId?: string | null;
+  effectiveStatus?: string | null;
 }
 export interface AdInsightDaily {
   adMetaId: string;

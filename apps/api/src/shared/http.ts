@@ -38,6 +38,8 @@ export class GraphApiError extends Error {
     public readonly code: number | null,
     public readonly subcode: number | null,
     public readonly transient: boolean,
+    /** Mensagem pensada para o usuário final (error_user_msg), quando a Meta envia. */
+    public readonly userMessage: string | null = null,
   ) {
     super(message);
     this.name = 'GraphApiError';
@@ -48,6 +50,7 @@ export class GraphApiError extends Error {
     // Códigos de limite/indisponibilidade da Graph API: 1, 2, 4, 17, 32, 341, 613, 80000-80014
     const rateOrTransient = [1, 2, 4, 17, 32, 341, 613].includes(e.code) || (e.code >= 80000 && e.code <= 80014);
     const transient = status >= 500 || status === 429 || rateOrTransient || e.is_transient === true;
-    return new GraphApiError(e.message ?? `HTTP ${status}`, status, e.code ?? null, e.error_subcode ?? null, transient);
+    const userMessage = [e.error_user_title, e.error_user_msg].filter(Boolean).join(': ') || null;
+    return new GraphApiError(e.message ?? `HTTP ${status}`, status, e.code ?? null, e.error_subcode ?? null, transient, userMessage);
   }
 }

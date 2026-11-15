@@ -6,7 +6,7 @@ import { DAY_MS, type Clock } from '../../shared/ids.js';
 import { GraphApiError, type HttpClient } from '../../shared/http.js';
 import type { AttributionEngine } from '../attribution/AttributionEngine.js';
 import { parseAdAccounts } from './adAccounts.js';
-import { MESSAGING_STARTED_ACTION, MetaMarketingClient, toCents } from './MetaMarketingClient.js';
+import { MESSAGING_STARTED_ACTION, MetaMarketingClient, toAd, toAdSet, toCampaign, toCents } from './MetaMarketingClient.js';
 
 export const META_SYNC_JOB = 'meta.sync';
 
@@ -119,8 +119,21 @@ export class MetaSyncService {
   /** IDs das contas a sincronizar: as configuradas ou, no modo "todas", as que o token acessa. */
   private async resolveAccounts(client: MetaMarketingClient, stored: string): Promise<string[]> {
     const configured = parseAdAccounts(stored);
+    const accessible = await client.listAdAccounts().catch(() => null);
+    if (accessible) {
+      // Nome, moeda e fuso de cada conta (para o gerenciador de anúncios do CRM).
+      await this.repos.ads.upsertAdAccounts(
+        accessible.map((a) => ({
+          id: a.account_id ?? a.id.replace(/^act_/, ''),
+          name: a.name,
+          currency: a.currency ?? null,
+          timezoneName: a.timezone_name ?? null,
+          status: a.account_status ?? null,
+        })),
+      );
+    }
     if (configured.length) return configured;
-    const accessible = await client.listAdAccounts();
+    if (!accessible) return client.listAdAccounts().then((l) => l.map((a) => a.account_id ?? a.id.replace(/^act_/, '')));
     return accessible.map((a) => a.account_id ?? a.id.replace(/^act_/, ''));
   }
 
@@ -135,15 +148,9 @@ export class MetaSyncService {
 
     // Gravação em lote (poucas consultas, sem transação longa). Ordem: campanhas → conjuntos →
     // anúncios → investimento; se algo falhar no meio, a próxima sincronização completa (upsert).
-    await this.repos.ads.upsertCampaigns(
-      campaigns.map((c) => ({ metaId: c.id, name: c.name, status: c.status ?? null, objective: c.objective ?? null })),
-    );
-    await this.repos.ads.upsertAdSets(
-      adSets.map((s) => ({ metaId: s.id, campaignMetaId: s.campaign_id, name: s.name, status: s.status ?? null })),
-    );
-    await this.repos.ads.upsertAds(
-      ads.map((a) => ({ metaId: a.id, adSetMetaId: a.adset_id, campaignMetaId: a.campaign_id, name: a.name, status: a.status ?? null })),
-    );
+    await this.repos.ads.upsertCampaigns(campaigns.map((c) => toCampaign(c, accountId)));
+    await this.repos.ads.upsertAdSets(adSets.map(toAdSet));
+    await this.repos.ads.upsertAds(ads.map(toAd));
     await this.repos.ads.upsertInsights(
       insights.map((row) => ({
         adMetaId: row.ad_id,
@@ -168,6 +175,11 @@ export class MetaSyncService {
       const checks = [
         { name: 'Token válido', ok: t.valid, detail: t.valid ? 'sim' : 'inválido' },
         { name: 'Escopo ads_read', ok: t.scopes.includes('ads_read'), detail: t.scopes.join(', ') || 'nenhum' },
+        {
+          name: 'Escopo ads_management (ativar, pausar e mudar orçamento pelo CRM)',
+          ok: t.scopes.includes('ads_management'),
+          detail: t.scopes.includes('ads_management') ? 'sim' : 'ausente: gere um novo token com ads_management para gerenciar anúncios pelo CRM',
+        },
       ];
       const accessible = await client.listAdAccounts().catch(() => null);
       const configured = parseAdAccounts(conn.adAccountId);

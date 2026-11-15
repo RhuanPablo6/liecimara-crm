@@ -14,6 +14,7 @@ import { GoalsService } from './modules/finance/goals.js';
 import { PatientsService } from './modules/patients/PatientsService.js';
 import { FunnelService } from './modules/funnel/FunnelService.js';
 import { IntegrationService } from './modules/integrations/IntegrationService.js';
+import { AdsManagerService } from './modules/meta/AdsManagerService.js';
 import { MetaSyncService } from './modules/meta/MetaSyncService.js';
 import { MetricsService } from './modules/metrics/MetricsService.js';
 import { WebhookIngestionService } from './modules/whatsapp/WebhookIngestionService.js';
@@ -49,8 +50,9 @@ export function buildContainer(env: Env) {
     publicUrl: env.API_PUBLIC_URL,
   });
   const metaSync = new MetaSyncService(repos, vault, http, clock, integrationEnv, env.META_GRAPH_VERSION, engine);
+  const adsManager = new AdsManagerService(repos, vault, http, integrationEnv, env.META_GRAPH_VERSION, metrics);
 
-  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, auth, audit, ingestion, processor, integrations, metaSync };
+  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, auth, audit, ingestion, processor, integrations, metaSync, adsManager };
 }
 
 export type Container = ReturnType<typeof buildContainer>;

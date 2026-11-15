@@ -3,6 +3,7 @@ import { Prisma, type PrismaClient } from '../../generated/prisma/client.js';
 import { DomainError, NotFoundError } from '../../domain/errors.js';
 import type {
   Ad,
+  AdAccountInfo,
   AdInsightDaily,
   AdSet,
   Campaign,
@@ -191,6 +192,15 @@ export class PrismaRepos implements Repos {
         throw err;
       }
     },
+    upsertAdAccounts: async (rows: AdAccountInfo[]) => {
+      for (const a of rows) {
+        await this.db.adAccount.upsert({ where: { id: a.id }, create: a, update: a });
+      }
+    },
+    listAdAccounts: async () => as<any>(await this.db.adAccount.findMany({ orderBy: { name: 'asc' } })),
+    patchCampaign: async (metaId: string, d: Partial<Campaign>) => void (await this.db.campaign.update({ where: { metaId }, data: d as any })),
+    patchAdSet: async (metaId: string, d: Partial<AdSet>) => void (await this.db.adSet.update({ where: { metaId }, data: d as any })),
+    patchAd: async (metaId: string, d: Partial<Ad>) => void (await this.db.ad.update({ where: { metaId }, data: d as any })),
     setAdProcedure: async (metaId: string, procedureId: string | null) => {
       try {
         return as<any>(await this.db.ad.update({ where: { metaId }, data: { procedureId } }));
@@ -215,29 +225,46 @@ export class PrismaRepos implements Repos {
     upsertCampaigns: async (rows: Campaign[]) => {
       for (const chunk of chunks(dedupeBy(rows, (r) => r.metaId), BULK)) {
         await this.db.$executeRaw(Prisma.sql`
-          INSERT INTO campaigns ("metaId", name, status, objective, "updatedAt")
-          VALUES ${Prisma.join(chunk.map((c) => Prisma.sql`(${c.metaId}, ${c.name}, ${c.status}, ${c.objective}, now())`))}
+          INSERT INTO campaigns ("metaId", name, status, objective, "accountId", "effectiveStatus", "dailyBudgetCents", "lifetimeBudgetCents", "stopTime", "updatedAt")
+          VALUES ${Prisma.join(
+            chunk.map(
+              (c) => Prisma.sql`(${c.metaId}, ${c.name}, ${c.status}, ${c.objective}, ${c.accountId ?? null}, ${c.effectiveStatus ?? null},
+                ${c.dailyBudgetCents ?? null}::int, ${c.lifetimeBudgetCents ?? null}::int, ${c.stopTime ?? null}::timestamp, now())`,
+            ),
+          )}
           ON CONFLICT ("metaId") DO UPDATE SET
-            name = EXCLUDED.name, status = EXCLUDED.status, objective = EXCLUDED.objective, "updatedAt" = now()`);
+            name = EXCLUDED.name, status = EXCLUDED.status, objective = EXCLUDED.objective,
+            "accountId" = COALESCE(EXCLUDED."accountId", campaigns."accountId"), "effectiveStatus" = EXCLUDED."effectiveStatus",
+            "dailyBudgetCents" = EXCLUDED."dailyBudgetCents", "lifetimeBudgetCents" = EXCLUDED."lifetimeBudgetCents",
+            "stopTime" = EXCLUDED."stopTime", "updatedAt" = now()`);
       }
     },
     upsertAdSets: async (rows: AdSet[]) => {
       for (const chunk of chunks(dedupeBy(rows, (r) => r.metaId), BULK)) {
         await this.db.$executeRaw(Prisma.sql`
-          INSERT INTO ad_sets ("metaId", "campaignMetaId", name, status, "updatedAt")
-          VALUES ${Prisma.join(chunk.map((a) => Prisma.sql`(${a.metaId}, ${a.campaignMetaId}, ${a.name}, ${a.status}, now())`))}
+          INSERT INTO ad_sets ("metaId", "campaignMetaId", name, status, "effectiveStatus", "dailyBudgetCents", "lifetimeBudgetCents", "updatedAt")
+          VALUES ${Prisma.join(
+            chunk.map(
+              (a) => Prisma.sql`(${a.metaId}, ${a.campaignMetaId}, ${a.name}, ${a.status}, ${a.effectiveStatus ?? null},
+                ${a.dailyBudgetCents ?? null}::int, ${a.lifetimeBudgetCents ?? null}::int, now())`,
+            ),
+          )}
           ON CONFLICT ("metaId") DO UPDATE SET
-            "campaignMetaId" = EXCLUDED."campaignMetaId", name = EXCLUDED.name, status = EXCLUDED.status, "updatedAt" = now()`);
+            "campaignMetaId" = EXCLUDED."campaignMetaId", name = EXCLUDED.name, status = EXCLUDED.status,
+            "effectiveStatus" = EXCLUDED."effectiveStatus", "dailyBudgetCents" = EXCLUDED."dailyBudgetCents",
+            "lifetimeBudgetCents" = EXCLUDED."lifetimeBudgetCents", "updatedAt" = now()`);
       }
     },
     upsertAds: async (rows: Ad[]) => {
       for (const chunk of chunks(dedupeBy(rows, (r) => r.metaId), BULK)) {
         await this.db.$executeRaw(Prisma.sql`
-          INSERT INTO ads ("metaId", "adSetMetaId", "campaignMetaId", name, status, "updatedAt")
-          VALUES ${Prisma.join(chunk.map((a) => Prisma.sql`(${a.metaId}, ${a.adSetMetaId}, ${a.campaignMetaId}, ${a.name}, ${a.status}, now())`))}
+          INSERT INTO ads ("metaId", "adSetMetaId", "campaignMetaId", name, status, "effectiveStatus", "updatedAt")
+          VALUES ${Prisma.join(
+            chunk.map((a) => Prisma.sql`(${a.metaId}, ${a.adSetMetaId}, ${a.campaignMetaId}, ${a.name}, ${a.status}, ${a.effectiveStatus ?? null}, now())`),
+          )}
           ON CONFLICT ("metaId") DO UPDATE SET
             "adSetMetaId" = EXCLUDED."adSetMetaId", "campaignMetaId" = EXCLUDED."campaignMetaId",
-            name = EXCLUDED.name, status = EXCLUDED.status, "updatedAt" = now()`);
+            name = EXCLUDED.name, status = EXCLUDED.status, "effectiveStatus" = EXCLUDED."effectiveStatus", "updatedAt" = now()`);
       }
     },
     upsertInsights: async (rows: AdInsightDaily[]) => {

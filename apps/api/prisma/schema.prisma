@@ -135,6 +135,12 @@ model Campaign {
   name      String
   status    String?
   objective String?
+  // Conta de anúncios (sem "act_"), veiculação efetiva e orçamento (centavos) vindos da Meta
+  accountId           String?
+  effectiveStatus     String?
+  dailyBudgetCents    Int?
+  lifetimeBudgetCents Int?
+  stopTime            DateTime?
   updatedAt DateTime @updatedAt
 
   @@map("campaigns")
@@ -145,6 +151,9 @@ model AdSet {
   campaignMetaId String
   name           String
   status         String?
+  effectiveStatus     String?
+  dailyBudgetCents    Int?
+  lifetimeBudgetCents Int?
   updatedAt      DateTime @updatedAt
 
   @@index([campaignMetaId])
@@ -162,6 +171,7 @@ model Ad {
   code           String?  @unique
   // Procedimento que o anúncio divulga (definido no CRM): usado no financeiro por procedimento.
   procedureId    String?
+  effectiveStatus String?
   updatedAt      DateTime @updatedAt
 
   @@index([campaignMetaId])
@@ -566,4 +576,17 @@ model Setting {
   updatedAt DateTime @updatedAt
 
   @@map("settings")
+}
+
+// ── Contas de anúncios da Meta ─────────────────────────────
+
+model AdAccount {
+  id           String   @id // sem "act_"
+  name         String
+  currency     String?
+  timezoneName String?
+  status       Int?
+  updatedAt    DateTime @updatedAt
+
+  @@map("ad_accounts")
 }

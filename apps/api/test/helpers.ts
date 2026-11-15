@@ -7,6 +7,7 @@ import { PatientsService } from '../src/modules/patients/PatientsService.js';
 import { FunnelService } from '../src/modules/funnel/FunnelService.js';
 import { MetricsService } from '../src/modules/metrics/MetricsService.js';
 import { MetaSyncService, META_SYNC_JOB } from '../src/modules/meta/MetaSyncService.js';
+import { AdsManagerService } from '../src/modules/meta/AdsManagerService.js';
 import { CloudApiAdapter } from '../src/modules/whatsapp/adapters/CloudApiAdapter.js';
 import { signMetaPayload } from '../src/modules/whatsapp/webhookSignature.js';
 import { PROCESS_EVENT_JOB, WebhookIngestionService } from '../src/modules/whatsapp/WebhookIngestionService.js';
@@ -51,6 +52,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
   const goals = new GoalsService(repos, finance);
   const patients = new PatientsService(repos);
   const metaSync = new MetaSyncService(repos, vault, http, clock, 'HOMOLOG', 'v23.0', engine, 'https://graph.test');
+  const adsManager = new AdsManagerService(repos, vault, http, 'HOMOLOG', 'v23.0', metrics, 'https://graph.test');
   const integrations = new IntegrationService(repos, vault, http, clock, 'HOMOLOG', {
     graphVersion: 'v23.0',
     appSecret: APP_SECRET,
@@ -73,7 +75,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
     return ingestion.ingest(provider, raw, headers);
   }
 
-  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, finance, accounts, goals, patients, metaSync, integrations, provider, worker, deliver };
+  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, finance, accounts, goals, patients, metaSync, adsManager, integrations, provider, worker, deliver };
 }
 
 export type World = ReturnType<typeof buildWorld>;

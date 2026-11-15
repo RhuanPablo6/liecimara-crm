@@ -6,6 +6,7 @@ import type { Container } from '../container.js';
 import { DomainError, UnauthorizedError } from '../domain/errors.js';
 import type { TokenClaims } from '../modules/auth/auth.js';
 import { assertCan, type Permission } from '../modules/auth/rbac.js';
+import { registerAdsManagerRoutes } from './routes/adsManager.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerFinanceRoutes } from './routes/finance.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
@@ -79,6 +80,7 @@ export function buildServer(c: Container) {
   registerPurchaseRoutes(app, c, guard);
   registerFinanceRoutes(app, c, guard);
   registerPatientRoutes(app, c, guard);
+  registerAdsManagerRoutes(app, c, guard);
 
   return app;
 }

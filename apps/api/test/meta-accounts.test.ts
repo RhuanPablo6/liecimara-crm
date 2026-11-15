@@ -58,7 +58,8 @@ describe('Meta: várias contas de anúncios', () => {
     const r = await w.metaSync.sync();
     assert.equal(r.accounts, 1);
     assert.deepEqual((await w.repos.ads.listAds()).map((a) => a.metaId), ['AD-222']);
-    assert.ok(!w.http.calls.some((u) => u.includes('/me/adaccounts')), 'não precisa descobrir contas');
+    // A lista de contas é consultada só para guardar nome/moeda; não amplia o que é importado.
+    assert.ok(!w.http.calls.some((u) => u.includes('act_111/')), 'não importa contas fora da lista');
   });
 
   it('falha em uma conta não impede as outras; erro registrado e status com alerta', async () => {

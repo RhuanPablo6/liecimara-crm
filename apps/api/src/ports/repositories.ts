@@ -3,6 +3,7 @@
 
 import type {
   Ad,
+  AdAccountInfo,
   AdInsightDaily,
   AdSet,
   Appointment,
@@ -113,6 +114,12 @@ export interface AdRepo {
   setAdCode(metaId: string, code: string | null): Promise<Ad>;
   /** Liga (ou desliga, com null) o anúncio a um procedimento. */
   setAdProcedure(metaId: string, procedureId: string | null): Promise<Ad>;
+  upsertAdAccounts(rows: AdAccountInfo[]): Promise<void>;
+  listAdAccounts(): Promise<AdAccountInfo[]>;
+  /** Atualiza campos locais depois de uma alteração feita na Meta pelo CRM. */
+  patchCampaign(metaId: string, data: Partial<Campaign>): Promise<void>;
+  patchAdSet(metaId: string, data: Partial<AdSet>): Promise<void>;
+  patchAd(metaId: string, data: Partial<Ad>): Promise<void>;
   upsertCampaign(c: Campaign): Promise<void>;
   upsertAdSet(a: AdSet): Promise<void>;
   upsertAd(a: Ad): Promise<void>;
