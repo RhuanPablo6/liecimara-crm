@@ -32,11 +32,30 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
+/**
+ * URL do Postgres. Além de DATABASE_URL, aceita os nomes criados pelas integrações
+ * de banco da Vercel (Neon/Postgres), inclusive com prefixo personalizado
+ * (ex.: STORAGE_DATABASE_URL, STORAGE_POSTGRES_URL).
+ */
+export function findDatabaseUrl(source: NodeJS.ProcessEnv, opts: { direct?: boolean } = {}): string | undefined {
+  const exact = opts.direct
+    ? ['DATABASE_URL_UNPOOLED', 'POSTGRES_URL_NON_POOLING', 'DIRECT_DATABASE_URL']
+    : ['DATABASE_URL', 'POSTGRES_PRISMA_URL', 'POSTGRES_URL'];
+  for (const k of exact) if (source[k]) return source[k];
+  const suffixes = opts.direct ? ['_DATABASE_URL_UNPOOLED', '_POSTGRES_URL_NON_POOLING'] : ['_DATABASE_URL', '_POSTGRES_PRISMA_URL', '_POSTGRES_URL'];
+  for (const suf of suffixes) {
+    const key = Object.keys(source).find((k) => k.endsWith(suf) && source[k]);
+    if (key) return source[key];
+  }
+  return opts.direct ? findDatabaseUrl(source) : undefined;
+}
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   // Render: porta em PORT e URL pública em RENDER_EXTERNAL_URL.
   // Vercel: VERCEL=1 e domínio de produção em VERCEL_PROJECT_PRODUCTION_URL.
   const parsed = schema.safeParse({
     ...source,
+    DATABASE_URL: findDatabaseUrl(source),
     API_PORT: source.API_PORT || source.PORT || undefined,
     API_PUBLIC_URL:
       source.API_PUBLIC_URL ||
