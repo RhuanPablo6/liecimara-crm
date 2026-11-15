@@ -124,7 +124,7 @@ export class MetaSyncService {
     return accessible.map((a) => a.account_id ?? a.id.replace(/^act_/, ''));
   }
 
-  /** Importa uma conta. Grava em transações curtas (lotes) para não estourar o tempo limite. */
+  /** Importa uma conta de anúncios. */
   private async syncAccount(client: MetaMarketingClient, accountId: string, since: string, until: string) {
     const [campaigns, adSets, ads, insights] = await Promise.all([
       client.listCampaigns(accountId),
@@ -133,31 +133,28 @@ export class MetaSyncService {
       client.insightsByAdDaily(accountId, since, until),
     ]);
 
-    await this.repos.tx(async (r) => {
-      for (const c of campaigns) await r.ads.upsertCampaign({ metaId: c.id, name: c.name, status: c.status ?? null, objective: c.objective ?? null });
-      for (const s of adSets) await r.ads.upsertAdSet({ metaId: s.id, campaignMetaId: s.campaign_id, name: s.name, status: s.status ?? null });
-      for (const a of ads) {
-        await r.ads.upsertAd({ metaId: a.id, adSetMetaId: a.adset_id, campaignMetaId: a.campaign_id, name: a.name, status: a.status ?? null });
-      }
-    });
-
-    const BATCH = 200;
-    for (let i = 0; i < insights.length; i += BATCH) {
-      const chunk = insights.slice(i, i + BATCH);
-      await this.repos.tx(async (r) => {
-        for (const row of chunk) {
-          await r.ads.upsertInsight({
-            adMetaId: row.ad_id,
-            date: row.date_start,
-            spendCents: toCents(row.spend),
-            impressions: Number(row.impressions ?? 0),
-            clicks: Number(row.clicks ?? 0),
-            metaMessagingConversationsStarted: Number(row.actions?.find((a) => a.action_type === MESSAGING_STARTED_ACTION)?.value ?? 0),
-            currency: row.account_currency ?? 'BRL',
-          });
-        }
-      });
-    }
+    // Gravação em lote (poucas consultas, sem transação longa). Ordem: campanhas → conjuntos →
+    // anúncios → investimento; se algo falhar no meio, a próxima sincronização completa (upsert).
+    await this.repos.ads.upsertCampaigns(
+      campaigns.map((c) => ({ metaId: c.id, name: c.name, status: c.status ?? null, objective: c.objective ?? null })),
+    );
+    await this.repos.ads.upsertAdSets(
+      adSets.map((s) => ({ metaId: s.id, campaignMetaId: s.campaign_id, name: s.name, status: s.status ?? null })),
+    );
+    await this.repos.ads.upsertAds(
+      ads.map((a) => ({ metaId: a.id, adSetMetaId: a.adset_id, campaignMetaId: a.campaign_id, name: a.name, status: a.status ?? null })),
+    );
+    await this.repos.ads.upsertInsights(
+      insights.map((row) => ({
+        adMetaId: row.ad_id,
+        date: row.date_start,
+        spendCents: toCents(row.spend),
+        impressions: Number(row.impressions ?? 0),
+        clicks: Number(row.clicks ?? 0),
+        metaMessagingConversationsStarted: Number(row.actions?.find((a) => a.action_type === MESSAGING_STARTED_ACTION)?.value ?? 0),
+        currency: row.account_currency ?? 'BRL',
+      })),
+    );
     return { campaigns: campaigns.length, adSets: adSets.length, ads: ads.length, insightRows: insights.length };
   }
 

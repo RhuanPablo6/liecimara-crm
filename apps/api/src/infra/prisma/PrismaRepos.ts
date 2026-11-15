@@ -1,7 +1,10 @@
 // Implementação das portas de persistência com Prisma/PostgreSQL.
 import { Prisma, type PrismaClient } from '../../generated/prisma/client.js';
 import type {
+  Ad,
   AdInsightDaily,
+  AdSet,
+  Campaign,
   AuditEntry,
   InboundEvent,
   IntegrationConnection,
@@ -10,6 +13,7 @@ import type {
   IntegrationProvider,
 } from '../../domain/types.js';
 import { OPEN_STAGES } from '../../domain/types.js';
+import { newId } from '../../shared/ids.js';
 import type { DateRange, LeadFilter, Repos } from '../../ports/repositories.js';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -17,6 +21,10 @@ type Db = PrismaClient | Prisma.TransactionClient;
 const as = <T>(v: unknown) => v as T;
 const json = (v: unknown) => (v === undefined ? undefined : v === null ? Prisma.JsonNull : (v as Prisma.InputJsonValue));
 const inRange = (r: DateRange) => ({ gte: r.from, lt: r.to });
+const BULK = 500;
+const chunks = <T>(arr: T[], n: number): T[][] => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
+/** Mantém a última ocorrência de cada chave (um INSERT ... ON CONFLICT não aceita a mesma chave duas vezes). */
+const dedupeBy = <T>(arr: T[], key: (t: T) => string): T[] => [...new Map(arr.map((x) => [key(x), x])).values()];
 
 export class PrismaRepos implements Repos {
   constructor(
@@ -179,6 +187,53 @@ export class PrismaRepos implements Repos {
         create: data,
         update: data,
       });
+    },
+    // Lotes: um INSERT ... ON CONFLICT por bloco de até 500 linhas (poucas idas ao banco,
+    // sem transação longa, o que importa em serverless com o banco em outra região).
+    upsertCampaigns: async (rows: Campaign[]) => {
+      for (const chunk of chunks(dedupeBy(rows, (r) => r.metaId), BULK)) {
+        await this.db.$executeRaw(Prisma.sql`
+          INSERT INTO campaigns ("metaId", name, status, objective, "updatedAt")
+          VALUES ${Prisma.join(chunk.map((c) => Prisma.sql`(${c.metaId}, ${c.name}, ${c.status}, ${c.objective}, now())`))}
+          ON CONFLICT ("metaId") DO UPDATE SET
+            name = EXCLUDED.name, status = EXCLUDED.status, objective = EXCLUDED.objective, "updatedAt" = now()`);
+      }
+    },
+    upsertAdSets: async (rows: AdSet[]) => {
+      for (const chunk of chunks(dedupeBy(rows, (r) => r.metaId), BULK)) {
+        await this.db.$executeRaw(Prisma.sql`
+          INSERT INTO ad_sets ("metaId", "campaignMetaId", name, status, "updatedAt")
+          VALUES ${Prisma.join(chunk.map((a) => Prisma.sql`(${a.metaId}, ${a.campaignMetaId}, ${a.name}, ${a.status}, now())`))}
+          ON CONFLICT ("metaId") DO UPDATE SET
+            "campaignMetaId" = EXCLUDED."campaignMetaId", name = EXCLUDED.name, status = EXCLUDED.status, "updatedAt" = now()`);
+      }
+    },
+    upsertAds: async (rows: Ad[]) => {
+      for (const chunk of chunks(dedupeBy(rows, (r) => r.metaId), BULK)) {
+        await this.db.$executeRaw(Prisma.sql`
+          INSERT INTO ads ("metaId", "adSetMetaId", "campaignMetaId", name, status, "updatedAt")
+          VALUES ${Prisma.join(chunk.map((a) => Prisma.sql`(${a.metaId}, ${a.adSetMetaId}, ${a.campaignMetaId}, ${a.name}, ${a.status}, now())`))}
+          ON CONFLICT ("metaId") DO UPDATE SET
+            "adSetMetaId" = EXCLUDED."adSetMetaId", "campaignMetaId" = EXCLUDED."campaignMetaId",
+            name = EXCLUDED.name, status = EXCLUDED.status, "updatedAt" = now()`);
+      }
+    },
+    upsertInsights: async (rows: AdInsightDaily[]) => {
+      for (const chunk of chunks(dedupeBy(rows, (r) => `${r.adMetaId}|${r.date}`), BULK)) {
+        await this.db.$executeRaw(Prisma.sql`
+          INSERT INTO ad_insights_daily
+            (id, "adMetaId", date, "spendCents", impressions, clicks, "metaMessagingConversationsStarted", currency, "syncedAt")
+          VALUES ${Prisma.join(
+            chunk.map(
+              (i) => Prisma.sql`(${newId('ins_')}, ${i.adMetaId}, ${i.date}::date, ${i.spendCents}, ${i.impressions}, ${i.clicks},
+                ${i.metaMessagingConversationsStarted}, ${i.currency}, now())`,
+            ),
+          )}
+          ON CONFLICT ("adMetaId", date) DO UPDATE SET
+            "spendCents" = EXCLUDED."spendCents", impressions = EXCLUDED.impressions, clicks = EXCLUDED.clicks,
+            "metaMessagingConversationsStarted" = EXCLUDED."metaMessagingConversationsStarted",
+            currency = EXCLUDED.currency, "syncedAt" = now()`);
+      }
     },
     listAds: async () => as<any>(await this.db.ad.findMany()),
     listCampaigns: async () => as<any>(await this.db.campaign.findMany()),

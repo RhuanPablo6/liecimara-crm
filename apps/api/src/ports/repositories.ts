@@ -109,6 +109,11 @@ export interface AdRepo {
   upsertAdSet(a: AdSet): Promise<void>;
   upsertAd(a: Ad): Promise<void>;
   upsertInsight(i: AdInsightDaily): Promise<void>;
+  /** Gravação em lote (uma consulta por bloco): usada na sincronização da Meta. */
+  upsertCampaigns(rows: Campaign[]): Promise<void>;
+  upsertAdSets(rows: AdSet[]): Promise<void>;
+  upsertAds(rows: Ad[]): Promise<void>;
+  upsertInsights(rows: AdInsightDaily[]): Promise<void>;
   listAds(): Promise<Ad[]>;
   listCampaigns(): Promise<Campaign[]>;
   listAdSets(): Promise<AdSet[]>;
