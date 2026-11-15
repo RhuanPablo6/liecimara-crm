@@ -16,7 +16,7 @@ services:
       retries: 10
 
   migrate:
-    build: { context: ., dockerfile: apps/api/Dockerfile, target: build }
+    build: { context: ., dockerfile: docker/api.Dockerfile, target: build }
     env_file: .env
     environment:
       DATABASE_URL: postgresql://crm:${POSTGRES_PASSWORD:-crm}@db:5432/liecimara_crm?schema=public
@@ -26,7 +26,7 @@ services:
       db: { condition: service_healthy }
 
   api:
-    build: { context: ., dockerfile: apps/api/Dockerfile }
+    build: { context: ., dockerfile: docker/api.Dockerfile }
     restart: unless-stopped
     env_file: .env
     environment:
@@ -36,7 +36,7 @@ services:
       migrate: { condition: service_completed_successfully }
 
   worker:
-    build: { context: ., dockerfile: apps/api/Dockerfile }
+    build: { context: ., dockerfile: docker/api.Dockerfile }
     restart: unless-stopped
     env_file: .env
     environment:
@@ -48,7 +48,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: docker/web.Dockerfile
       args: { NEXT_PUBLIC_API_URL: '${NEXT_PUBLIC_API_URL:-http://localhost:4000}' }
     restart: unless-stopped
     environment:

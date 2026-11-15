@@ -1,3 +1,5 @@
+# Imagem da API e do worker (contexto: raiz do repositório). Fica fora de apps/api
+# para a Vercel não tratar a API como contêiner.
 # API e worker compartilham a mesma imagem; o comando define o papel.
 FROM node:22-alpine AS deps
 WORKDIR /app

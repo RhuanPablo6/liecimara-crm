@@ -15,7 +15,7 @@ services:
     runtime: docker
     region: virginia
     plan: 0.5c-512mb
-    dockerfilePath: ./apps/api/Dockerfile
+    dockerfilePath: ./docker/api.Dockerfile
     dockerContext: .
     healthCheckPath: /health
     # Aplica migrações e garante o administrador inicial antes de cada versão entrar no ar.
@@ -53,7 +53,7 @@ services:
     runtime: docker
     region: virginia
     plan: 0.5c-512mb
-    dockerfilePath: ./apps/web/Dockerfile
+    dockerfilePath: ./docker/web.Dockerfile
     dockerContext: .
     healthCheckPath: /login
     envVars:
