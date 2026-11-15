@@ -240,10 +240,17 @@ function WhatsAppPanel() {
 function MetaPanel() {
   const { data, reload } = useApi('/integrations/meta');
   const act = useAction();
-  const [form, setForm] = useState({ adAccountId: '', accessToken: '' });
+  const [form, setForm] = useState({ adAccountIds: '', accessToken: '' });
   const [diag, setDiag] = useState<any[] | null>(null);
   if (!data) return null;
   const st = STATUS[data.status] ?? STATUS.PENDING!;
+  const accountsLabel = !data.configured
+    ? null
+    : data.allAdAccounts
+      ? 'Todas as contas acessíveis pelo token'
+      : (data.adAccountIds ?? []).map((id: string) => `act_${id}`).join(', ');
+  // Sem token novo, só é possível salvar se já houver um token guardado.
+  const canSave = !!form.accessToken || data.configured;
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <Card>
@@ -255,18 +262,39 @@ function MetaPanel() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="divide-y">
-            <Row label="Conta de anúncios" value={data.adAccountId && `act_${data.adAccountId}`} />
+            <Row label="Contas de anúncios" value={accountsLabel} />
             <Row label="Última sincronização" value={dateTime(data.lastSyncAt)} />
           </div>
-          <Field label="ID da conta de anúncios">
-            <Input placeholder="act_123456789" value={form.adAccountId} onChange={(e) => setForm({ ...form, adAccountId: e.target.value })} />
+          <Field label="Contas de anúncios">
+            <Input
+              placeholder="Em branco = todas as contas do token · ou act_123, act_456"
+              value={form.adAccountIds}
+              onChange={(e) => setForm({ ...form, adAccountIds: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Deixe em branco para sincronizar todas as contas atribuídas ao usuário do sistema, ou informe os IDs separados por vírgula.
+            </p>
           </Field>
           <Field label="Token de acesso">
-            <Input type="password" value={form.accessToken} onChange={(e) => setForm({ ...form, accessToken: e.target.value })} />
+            <Input
+              type="password"
+              placeholder={data.configured ? 'Deixe em branco para manter o token atual' : ''}
+              value={form.accessToken}
+              onChange={(e) => setForm({ ...form, accessToken: e.target.value })}
+            />
           </Field>
           <ErrorText>{act.error}</ErrorText>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={act.busy || !form.adAccountId || !form.accessToken} onClick={() => act.run(async () => (await api('/integrations/meta', { method: 'POST', body: form }), await reload()))}>
+            <Button
+              disabled={act.busy || !canSave}
+              onClick={() =>
+                act.run(async () => {
+                  await api('/integrations/meta', { method: 'POST', body: form });
+                  setForm({ adAccountIds: '', accessToken: '' });
+                  await reload();
+                })
+              }
+            >
               Salvar e sincronizar
             </Button>
             <Button variant="outline" disabled={act.busy || !data.configured} onClick={() => act.run(async () => (await api('/integrations/meta/sync', { method: 'POST' }), await reload()))}>

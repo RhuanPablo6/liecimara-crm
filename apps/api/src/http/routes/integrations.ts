@@ -70,8 +70,19 @@ export function registerIntegrationRoutes(app: FastifyInstance, c: Container, gu
   app.get('/integrations/meta', { preHandler: guard('integrations:read') }, async () => c.integrations.metaStatus());
 
   app.post('/integrations/meta', { preHandler: guard('integrations:write') }, async (req) => {
-    const b = z.object({ adAccountId: z.string().regex(/^(act_)?\d+$/), accessToken: z.string().min(20) }).parse(req.body);
-    const conn = await c.integrations.configureMeta(b, actorOf(req));
+    // adAccountIds: "act_1, act_2" ou vazio (= todas as contas acessíveis). Token opcional se já houver um salvo.
+    // adAccountId (singular) continua aceito por compatibilidade.
+    const b = z
+      .object({
+        adAccountIds: z.string().max(2000).optional(),
+        adAccountId: z.string().max(2000).optional(),
+        accessToken: z.string().min(20).optional().or(z.literal('')),
+      })
+      .parse(req.body);
+    const conn = await c.integrations.configureMeta(
+      { adAccountIds: b.adAccountIds ?? b.adAccountId, accessToken: b.accessToken || undefined },
+      actorOf(req),
+    );
     await c.queue.enqueue(META_SYNC_JOB, { days: 90 }, { dedupKey: 'meta-sync' });
     return { id: conn.id, status: conn.status };
   });

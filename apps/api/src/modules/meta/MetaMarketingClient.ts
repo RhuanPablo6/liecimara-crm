@@ -29,6 +29,13 @@ export interface MetaInsightRow {
   actions?: { action_type: string; value: string }[];
 }
 
+export interface MetaAdAccount {
+  id: string; // "act_123"
+  account_id: string; // "123"
+  name: string;
+  account_status?: number; // 1 = ativa
+}
+
 export const MESSAGING_STARTED_ACTION = 'onsite_conversion.messaging_conversation_started_7d';
 
 /** Cliente da Meta Marketing API (somente leitura: campanhas, anúncios e investimento). */
@@ -57,6 +64,11 @@ export class MetaMarketingClient {
       url = body.paging?.next ?? null;
     }
     return out;
+  }
+
+  /** Contas de anúncios a que o token tem acesso (usuário do sistema ou pessoa). */
+  listAdAccounts() {
+    return this.getAll<MetaAdAccount>('me/adaccounts', { fields: 'id,account_id,name,account_status' });
   }
 
   listCampaigns(adAccountId: string) {

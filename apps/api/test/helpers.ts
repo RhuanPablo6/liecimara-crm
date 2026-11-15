@@ -8,6 +8,7 @@ import { signMetaPayload } from '../src/modules/whatsapp/webhookSignature.js';
 import { PROCESS_EVENT_JOB, WebhookIngestionService } from '../src/modules/whatsapp/WebhookIngestionService.js';
 import { WhatsAppEventProcessor } from '../src/modules/whatsapp/WhatsAppEventProcessor.js';
 import { CredentialVault } from '../src/infra/crypto/CredentialVault.js';
+import { IntegrationService } from '../src/modules/integrations/IntegrationService.js';
 import { MemoryRepos } from '../src/infra/memory/MemoryRepos.js';
 import { InMemoryJobQueue } from '../src/queue/InMemoryJobQueue.js';
 import { Worker } from '../src/queue/Worker.js';
@@ -40,6 +41,12 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
   const funnel = new FunnelService(repos, clock);
   const metrics = new MetricsService(repos);
   const metaSync = new MetaSyncService(repos, vault, http, clock, 'HOMOLOG', 'v23.0', engine, 'https://graph.test');
+  const integrations = new IntegrationService(repos, vault, http, clock, 'HOMOLOG', {
+    graphVersion: 'v23.0',
+    appSecret: APP_SECRET,
+    verifyToken: 'verify',
+    publicUrl: 'https://api.test',
+  });
   const provider = new CloudApiAdapter(
     { graphVersion: 'v23.0', appSecret: APP_SECRET, accessToken: 'x', phoneNumberId: PHONE_NUMBER_ID, wabaId: WABA_ID, coexistence: true },
     http,
@@ -56,7 +63,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
     return ingestion.ingest(provider, raw, headers);
   }
 
-  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, metaSync, provider, worker, deliver };
+  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, metaSync, integrations, provider, worker, deliver };
 }
 
 export type World = ReturnType<typeof buildWorld>;

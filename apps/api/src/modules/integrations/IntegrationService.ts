@@ -6,6 +6,7 @@ import type { Clock } from '../../shared/ids.js';
 import type { HttpClient } from '../../shared/http.js';
 import { CloudApiAdapter } from '../whatsapp/adapters/CloudApiAdapter.js';
 import { PartnerCoexistenceAdapter, type PartnerConfig } from '../whatsapp/adapters/PartnerCoexistenceAdapter.js';
+import { ALL_AD_ACCOUNTS, normalizeAdAccountsInput, parseAdAccounts } from '../meta/adAccounts.js';
 import type { WhatsAppProvider } from '../whatsapp/WhatsAppProvider.js';
 
 export interface IntegrationSettings {
@@ -102,10 +103,23 @@ export class IntegrationService {
     return conn;
   }
 
-  async configureMeta(input: { adAccountId: string; accessToken: string }, actor: { id: string; role: Role }) {
+  /**
+   * Salva as contas de anúncios (lista ou "todas") e, se informado, um novo token.
+   * Sem token novo, mantém o já salvo (permite trocar só as contas).
+   */
+  async configureMeta(input: { adAccountIds?: string; accessToken?: string }, actor: { id: string; role: Role }) {
+    let adAccountId: string;
+    try {
+      adAccountId = normalizeAdAccountsInput(input.adAccountIds);
+    } catch (e) {
+      throw new DomainError('VALIDATION', (e as Error).message);
+    }
+    const current = await this.repos.connections.find('META_MARKETING', this.env);
+    const token = input.accessToken?.trim();
+    if (!token && !current?.encryptedCredentials) throw new DomainError('VALIDATION', 'Informe o token de acesso');
     const conn = await this.repos.connections.upsert('META_MARKETING', this.env, {
-      adAccountId: input.adAccountId.replace(/^act_/, ''),
-      encryptedCredentials: this.vault.encrypt({ accessToken: input.accessToken }),
+      adAccountId,
+      ...(token ? { encryptedCredentials: this.vault.encrypt({ accessToken: token }) } : {}),
       status: 'PENDING',
     });
     await this.repos.audit.log({
@@ -113,7 +127,7 @@ export class IntegrationService {
       action: 'integration.meta.configure',
       entityType: 'IntegrationConnection',
       entityId: conn.id,
-      after: { adAccountId: conn.adAccountId },
+      after: { adAccountId: conn.adAccountId, tokenUpdated: !!token },
     });
     return conn;
   }
@@ -244,6 +258,8 @@ export class IntegrationService {
       configured: !!c?.encryptedCredentials,
       status: c?.status ?? 'PENDING',
       adAccountId: c?.adAccountId ?? null,
+      allAdAccounts: c?.adAccountId === ALL_AD_ACCOUNTS,
+      adAccountIds: parseAdAccounts(c?.adAccountId),
       lastSyncAt: c?.lastSyncAt ?? null,
       recentErrors: await this.repos.connections.recentErrors('META_MARKETING', 10),
     };
