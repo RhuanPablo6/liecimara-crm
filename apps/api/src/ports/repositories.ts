@@ -213,6 +213,11 @@ export interface InboundEventRepo {
   countByStatus(): Promise<Record<string, number>>;
 }
 
+export interface SettingRepo {
+  get<T>(key: string): Promise<T | null>;
+  set<T>(key: string, value: T): Promise<void>;
+}
+
 export interface AuditRepo {
   log(entry: AuditEntry): Promise<void>;
   list(filter: { entityType?: string; entityId?: string; limit?: number }): Promise<
@@ -240,6 +245,7 @@ export interface Repos {
   connections: ConnectionRepo;
   events: InboundEventRepo;
   audit: AuditRepo;
+  settings: SettingRepo;
   /** Executa `fn` em transação. */
   tx<T>(fn: (r: Repos) => Promise<T>): Promise<T>;
 }

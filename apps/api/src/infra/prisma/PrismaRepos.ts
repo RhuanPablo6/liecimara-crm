@@ -377,6 +377,12 @@ export class PrismaRepos implements Repos {
       ),
   };
 
+  settings = {
+    get: async <T>(key: string) => ((await this.db.setting.findUnique({ where: { key } }))?.value as T | undefined) ?? null,
+    set: async <T>(key: string, value: T) =>
+      void (await this.db.setting.upsert({ where: { key }, create: { key, value: value as any }, update: { value: value as any } })),
+  };
+
   performed = {
     create: async (d: any) => as<any>(await this.db.procedurePerformed.create({ data: d })),
     listByLead: async (leadId: string) => as<any>(await this.db.procedurePerformed.findMany({ where: { leadId } })),

@@ -185,6 +185,8 @@ export interface Sale {
   amountCents: number;
   soldAt: Date;
   status: SaleStatus;
+  /** Previsão de recebimento do saldo em aberto. */
+  dueAt?: Date | null;
   attributionConfidence: AttributionConfidence;
   adMetaId: string | null;
   campaignMetaId: string | null;
@@ -227,6 +229,10 @@ export interface SupplyPurchase {
   totalCents: number;
   paymentMethod: SupplyPaymentMethod;
   installments: number;
+  /** Vencimento da 1ª parcela; nulo = padrão (data da compra ou +1 mês se parcelado). */
+  firstDueAt?: Date | null;
+  /** Parcelas já pagas, em ordem. */
+  paidInstallments?: number;
   notes: string | null;
   createdById: string | null;
   createdAt: Date;

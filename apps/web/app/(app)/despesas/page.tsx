@@ -23,7 +23,7 @@ const EXPENSE_CATEGORIES = [
   'Contabilidade',
   'Sistemas e softwares',
   'Marketing (outros)',
-  'Taxas de cartão',
+  'Tarifas bancárias',
   'Manutenção',
   'Limpeza',
   'Material de escritório',

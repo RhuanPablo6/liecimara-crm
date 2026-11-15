@@ -2,6 +2,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Container } from '../../container.js';
+import { DomainError } from '../../domain/errors.js';
 import { SUPPLY_PAYMENT_METHODS, type SupplyPurchase } from '../../domain/types.js';
 import { dayRange, dayToDate, isDay } from '../../shared/days.js';
 import type { Guard } from '../server.js';
@@ -33,6 +34,10 @@ const purchaseSchema = z
   totalCents: z.number().int().positive('Informe o valor').max(10_000_000_00),
   paymentMethod: z.enum(SUPPLY_PAYMENT_METHODS),
   installments: z.number().int().min(1).max(48).default(1),
+  /** Vencimento da 1ª parcela (AAAA-MM-DD). */
+  firstDueAt: day.nullish(),
+  /** Parcelas já pagas. Sem o campo: à vista = paga, parcelado = nenhuma. */
+  paidInstallments: z.number().int().min(0).max(48).nullish(),
   notes: optionalText(2000),
   })
   .refine((b) => b.items.reduce((s, i) => s + (i.amountCents ?? 0), 0) <= b.totalCents, {
@@ -41,7 +46,12 @@ const purchaseSchema = z
   });
 
 function toData(b: z.infer<typeof purchaseSchema>) {
-  return { ...b, purchasedAt: dayToDate(b.purchasedAt) };
+  return {
+    ...b,
+    purchasedAt: dayToDate(b.purchasedAt),
+    firstDueAt: b.firstDueAt ? dayToDate(b.firstDueAt) : null,
+    paidInstallments: Math.min(b.installments, b.paidInstallments ?? (b.installments === 1 ? 1 : 0)),
+  };
 }
 
 export function summarize(list: SupplyPurchase[]) {
@@ -78,8 +88,22 @@ export function registerPurchaseRoutes(app: FastifyInstance, c: Container, guard
     const before = await c.repos.purchases.findById(id);
     // Sem "kind" no corpo, mantém o tipo atual (insumo ou aluguel).
     const kind = (req.body as { kind?: string } | null)?.kind ? b.kind : (before?.kind ?? b.kind);
-    const p = await c.repos.purchases.update(id, { ...toData(b), kind });
+    const data = toData(b);
+    // Sem o campo, mantém o que já foi pago (limitado ao novo nº de parcelas).
+    if (b.paidInstallments == null && before) data.paidInstallments = Math.min(b.installments, before.paidInstallments ?? 0);
+    const p = await c.repos.purchases.update(id, { ...data, kind });
     await c.audit.record({ userId: req.user!.sub, action: 'purchase.update', entityType: 'SupplyPurchase', entityId: id, before, after: p, ip: req.ip });
+    return p;
+  });
+
+  /** Marca quantas parcelas já foram pagas (contas a pagar). */
+  app.post('/purchases/:id/paid', { preHandler: guard('purchases:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const b = z.object({ paidInstallments: z.number().int().min(0).max(48) }).parse(req.body);
+    const before = await c.repos.purchases.findById(id);
+    if (!before) throw new DomainError('NOT_FOUND', 'Compra não encontrada', 404);
+    const p = await c.repos.purchases.update(id, { paidInstallments: Math.min(before.installments, b.paidInstallments) });
+    await c.audit.record({ userId: req.user!.sub, action: 'purchase.paid', entityType: 'SupplyPurchase', entityId: id, before: { paidInstallments: before.paidInstallments }, after: { paidInstallments: p.paidInstallments }, ip: req.ip });
     return p;
   });
 

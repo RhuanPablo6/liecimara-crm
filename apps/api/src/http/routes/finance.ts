@@ -3,8 +3,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Container } from '../../container.js';
 import { DomainError } from '../../domain/errors.js';
+import { CASH_SETTINGS_KEY, DEFAULT_FEE_RULES, FEE_SETTINGS_KEY } from '../../modules/finance/accounts.js';
 import { checkPeriod } from '../../modules/finance/FinanceService.js';
-import { dayRange, dayToDate, isDay, spDay } from '../../shared/days.js';
+import { addDays, dayRange, daysBetween, dayToDate, isDay, spDay } from '../../shared/days.js';
 import type { Guard } from '../server.js';
 
 const day = z.string().refine(isDay, 'Data no formato AAAA-MM-DD');
@@ -66,6 +67,8 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
         amountCents: z.number().int().positive('Informe o valor').max(10_000_000_00),
         soldAt: day,
         adMetaId: z.string().min(1).nullish(),
+        /** Previsão para receber o saldo em aberto. */
+        dueAt: day.nullish(),
         payment: z
           .object({
             method: z.enum(SALE_METHODS),
@@ -100,6 +103,7 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
       },
       actor,
     );
+    if (b.dueAt) await c.repos.sales.update(sale.id, { dueAt: dayToDate(b.dueAt) });
     const payment = b.payment
       ? await c.funnel.registerPayment(
           sale.id,
@@ -143,6 +147,7 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
         patientName: contact?.name ?? contact?.profileName ?? null,
         waId: contact?.waId ?? null,
         origin: s.adMetaId ? (adName.get(s.adMetaId) ?? 'Anúncio') : null,
+        dueAt: s.dueAt ?? null,
       });
     }
     return rows;
@@ -258,5 +263,65 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
       ip: req.ip,
     });
     return { updated: targets.length };
+  });
+
+  // ── Contas a pagar / a receber e fluxo de caixa ────────────
+  app.get('/finance/accounts', { preHandler: guard('finance:read') }, async (req) => {
+    const q = z.object({ from: day, to: day }).parse(req.query);
+    if (q.to < q.from) throw new DomainError('VALIDATION', 'A data final é anterior à inicial');
+    if (daysBetween(q.from, q.to) > 3 * 366) throw new DomainError('VALIDATION', 'Escolha um período de até 3 anos');
+    return c.accounts.list(q.from, q.to, spDay(new Date()));
+  });
+
+  app.get('/finance/cashflow', { preHandler: guard('finance:read') }, async (req) => {
+    const q = z.object({ to: day.optional(), granularity: z.enum(['day', 'week', 'month']).default('day') }).parse(req.query);
+    const today = spDay(new Date());
+    const to = q.to ?? addDays(today, 30);
+    if (to < today) throw new DomainError('VALIDATION', 'Escolha uma data futura');
+    if (daysBetween(today, to) > 731) throw new DomainError('VALIDATION', 'Projete até 2 anos');
+    return c.accounts.cashflow(today, to, q.granularity);
+  });
+
+  /** Previsão de recebimento do saldo em aberto de uma venda. */
+  app.patch('/sales/:id/due', { preHandler: guard('sales:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const b = z.object({ dueAt: day.nullable() }).parse(req.body);
+    const sale = await c.repos.sales.findById(id);
+    if (!sale) throw new DomainError('NOT_FOUND', 'Venda não encontrada', 404);
+    const updated = await c.repos.sales.update(id, { dueAt: b.dueAt ? dayToDate(b.dueAt) : null });
+    await c.audit.record({ userId: req.user!.sub, action: 'sale.due', entityType: 'Sale', entityId: id, before: { dueAt: sale.dueAt ?? null }, after: { dueAt: updated.dueAt ?? null }, ip: req.ip });
+    return updated;
+  });
+
+  // ── Configurações: taxas da maquininha e saldo em conta ────
+  app.get('/finance/settings', { preHandler: guard('finance:read') }, async () => ({
+    feeRules: await c.accounts.feeRules(),
+    defaultFeeRules: DEFAULT_FEE_RULES,
+    cashBalance: await c.repos.settings.get(CASH_SETTINGS_KEY),
+  }));
+
+  app.put('/finance/settings/fees', { preHandler: guard('finance:write') }, async (req) => {
+    const rule = z
+      .object({
+        method: z.enum(SALE_METHODS),
+        minInstallments: z.number().int().min(1).max(24),
+        maxInstallments: z.number().int().min(1).max(24),
+        feePct: z.number().min(0).max(30),
+        receiveDays: z.number().int().min(0).max(120),
+        anticipated: z.boolean(),
+      })
+      .refine((r) => r.minInstallments <= r.maxInstallments, { message: 'Faixa de parcelas inválida' });
+    const { rules } = z.object({ rules: z.array(rule).max(60) }).parse(req.body);
+    const before = await c.accounts.feeRules();
+    await c.repos.settings.set(FEE_SETTINGS_KEY, rules);
+    await c.audit.record({ userId: req.user!.sub, action: 'finance.fees', entityType: 'Setting', entityId: FEE_SETTINGS_KEY, before, after: rules, ip: req.ip });
+    return { rules };
+  });
+
+  app.put('/finance/settings/cash', { preHandler: guard('finance:write') }, async (req) => {
+    const b = z.object({ amountCents: z.number().int().min(-10_000_000_00).max(10_000_000_00), asOf: day }).parse(req.body);
+    await c.repos.settings.set(CASH_SETTINGS_KEY, b);
+    await c.audit.record({ userId: req.user!.sub, action: 'finance.cash', entityType: 'Setting', entityId: CASH_SETTINGS_KEY, after: b, ip: req.ip });
+    return b;
   });
 }

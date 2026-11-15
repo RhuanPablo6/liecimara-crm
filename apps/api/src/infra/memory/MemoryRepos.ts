@@ -50,6 +50,7 @@ interface State {
   payments: Map<string, Payment>;
   purchases: Map<string, SupplyPurchase>;
   expenses: Map<string, Expense>;
+  settings: Map<string, unknown>;
   performed: Map<string, ProcedurePerformed>;
   reminders: Map<string, Reminder>;
   connections: Map<string, IntegrationConnection>;
@@ -76,6 +77,7 @@ const emptyState = (): State => ({
   payments: new Map(),
   purchases: new Map(),
   expenses: new Map(),
+  settings: new Map(),
   performed: new Map(),
   reminders: new Map(),
   connections: new Map(),
@@ -331,7 +333,11 @@ export class MemoryRepos implements Repos {
   purchases = {
     create: async (d: Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt' | 'kind'> & { kind?: SupplyPurchase['kind'] }) => {
       const now = new Date();
-      return insert(this.s.purchases, { ...d, kind: d.kind ?? 'SUPPLY', createdAt: now, updatedAt: now } as SupplyPurchase, 'sup_');
+      return insert(
+        this.s.purchases,
+        { firstDueAt: null, paidInstallments: 0, ...d, kind: d.kind ?? 'SUPPLY', createdAt: now, updatedAt: now } as SupplyPurchase,
+        'sup_',
+      );
     },
     update: async (id: string, d: Partial<SupplyPurchase>) => {
       if (!this.s.purchases.has(id)) throw new NotFoundError('Registro de compra', id);
@@ -368,6 +374,11 @@ export class MemoryRepos implements Repos {
           .filter((e) => !r || inRange(e.date, r))
           .sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime()),
       ),
+  };
+
+  settings = {
+    get: async <T>(key: string) => clone((this.s.settings.get(key) as T | undefined) ?? null),
+    set: async <T>(key: string, value: T) => void this.s.settings.set(key, clone(value)),
   };
 
   performed = {

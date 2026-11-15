@@ -6,12 +6,14 @@
 //  - Insumos     = compras de insumos pela data da compra (não pelo consumo).
 //  - Aluguel     = aluguel de aparelhos (Ultraformer, Lavieen...) pela data do atendimento.
 //  - Anúncios    = gasto diário da Meta; vai para o procedimento ligado ao anúncio.
+//  - Taxas       = taxas da maquininha sobre os pagamentos, pela data do pagamento.
 //  - Despesas    = despesas da clínica (aluguel, energia...) pela data.
-//  - Resultado   = faturamento − insumos − aluguel − anúncios − despesas.
-//  - Por procedimento: margem de contribuição = faturamento − insumos − aluguel − anúncios do procedimento.
+//  - Resultado   = faturamento − insumos − aluguel − anúncios − taxas − despesas.
+//  - Por procedimento: margem de contribuição = faturamento − insumos − aluguel − anúncios − taxas do procedimento.
 
 import type { Repos } from '../../ports/repositories.js';
 import { addDays, dayRange, daysBetween, mondayOf, spDay } from '../../shared/days.js';
+import { DEFAULT_FEE_RULES, FEE_SETTINGS_KEY, type FeeRule, feeOf } from './accounts.js';
 
 export type Granularity = 'day' | 'week' | 'month';
 
@@ -28,6 +30,7 @@ export interface ProcedureRow {
   suppliesCents: number;
   rentalCents: number;
   adSpendCents: number;
+  feesCents: number;
   contributionCents: number;
   marginPct: number | null;
   roas: number | null;
@@ -40,6 +43,7 @@ export interface SeriesPoint {
   suppliesCents: number;
   rentalCents: number;
   adSpendCents: number;
+  feesCents: number;
   expensesCents: number;
   profitCents: number;
 }
@@ -56,6 +60,7 @@ export interface FinanceReport {
     suppliesCents: number;
     rentalCents: number;
     adSpendCents: number;
+    feesCents: number;
     expensesCents: number;
     expensesPendingCents: number;
     costsCents: number;
@@ -131,7 +136,8 @@ export class FinanceService {
     // Gastos da Meta são por data (sem hora): busca com folga e filtra pelo dia.
     const insightRange = { from: new Date(`${addDays(from, -1)}T00:00:00Z`), to: new Date(`${addDays(to, 2)}T00:00:00Z`) };
 
-    const [procedures, sales, payments, appointments, purchases, expenses, insights, ads] = await Promise.all([
+    const [rules, procedures, sales, payments, appointments, purchases, expenses, insights, ads] = await Promise.all([
+      this.repos.settings.get<FeeRule[]>(FEE_SETTINGS_KEY).then((r) => r ?? DEFAULT_FEE_RULES),
       this.repos.procedures.list(),
       this.repos.sales.listSoldIn(range),
       this.repos.payments.listPaidIn(range),
@@ -146,7 +152,7 @@ export class FinanceService {
     const series = new Map<string, SeriesPoint>(
       keys.map((k) => [
         k,
-        { key: k, label: bucketLabel(k, granularity, from), revenueCents: 0, suppliesCents: 0, rentalCents: 0, adSpendCents: 0, expensesCents: 0, profitCents: 0 },
+        { key: k, label: bucketLabel(k, granularity, from), revenueCents: 0, suppliesCents: 0, rentalCents: 0, adSpendCents: 0, feesCents: 0, expensesCents: 0, profitCents: 0 },
       ]),
     );
     const point = (day: string) => series.get(bucketOf(day, granularity));
@@ -171,7 +177,26 @@ export class FinanceService {
       point(day)!.revenueCents += s.amountCents;
     }
 
-    const receivedCents = payments.filter((p) => inPeriod(spDay(p.paidAt))).reduce((t, p) => t + p.amountCents, 0);
+    let receivedCents = 0;
+    let feesCents = 0;
+    const fees = new Map<string, number>();
+    const saleProc = new Map(sales.map((s) => [s.id, s.status === 'ACTIVE' ? s.procedureId : null]));
+    for (const p of payments) {
+      const day = spDay(p.paidAt);
+      if (!inPeriod(day)) continue;
+      receivedCents += p.amountCents;
+      const fee = feeOf(p, rules);
+      if (!fee) continue;
+      if (!saleProc.has(p.saleId)) {
+        const s = await this.repos.sales.findById(p.saleId);
+        saleProc.set(p.saleId, s && s.status === 'ACTIVE' ? s.procedureId : null);
+      }
+      const proc = saleProc.get(p.saleId);
+      if (proc === null) continue; // venda cancelada
+      feesCents += fee;
+      point(day)!.feesCents += fee;
+      add(fees, proc ?? NO_PROCEDURE, fee);
+    }
 
     // Agendamento sem procedimento: usa o procedimento de interesse do lead.
     const leadProcedure = new Map<string, string | null>();
@@ -229,7 +254,7 @@ export class FinanceService {
       byCategory.set(e.category, c);
     }
 
-    for (const p of series.values()) p.profitCents = p.revenueCents - p.suppliesCents - p.rentalCents - p.adSpendCents - p.expensesCents;
+    for (const p of series.values()) p.profitCents = p.revenueCents - p.suppliesCents - p.rentalCents - p.adSpendCents - p.feesCents - p.expensesCents;
 
     const row = (procedureId: string, name: string): ProcedureRow => {
       const rev = revenue.get(procedureId) ?? 0;
@@ -237,7 +262,8 @@ export class FinanceService {
       const rent = rental.get(procedureId) ?? 0;
       const ad = adSpend.get(procedureId) ?? 0;
       const n = salesCount.get(procedureId) ?? 0;
-      const contribution = rev - sup - rent - ad;
+      const fee = fees.get(procedureId) ?? 0;
+      const contribution = rev - sup - rent - ad - fee;
       return {
         procedureId,
         name,
@@ -249,6 +275,7 @@ export class FinanceService {
         suppliesCents: sup,
         rentalCents: rent,
         adSpendCents: ad,
+        feesCents: fee,
         contributionCents: contribution,
         marginPct: pct(contribution, rev),
         roas: ad > 0 && procedureId !== NO_PROCEDURE ? Math.round((rev / ad) * 100) / 100 : null,
@@ -259,7 +286,7 @@ export class FinanceService {
       .map((p) => row(p.id, p.name))
       .filter((r, idx) => procedures[idx]?.active || r.revenueCents || r.suppliesCents || r.rentalCents || r.adSpendCents || r.appointments);
     // Procedimentos apagados/desconhecidos entram como "sem procedimento".
-    for (const m of [revenue, salesCount, supplies, rental, adSpend, appts, attended]) {
+    for (const m of [revenue, salesCount, supplies, rental, adSpend, fees, appts, attended]) {
       for (const [k, v] of [...m]) {
         if (k !== NO_PROCEDURE && !known.has(k)) {
           m.delete(k);
@@ -268,12 +295,12 @@ export class FinanceService {
       }
     }
     const none = row(NO_PROCEDURE, 'Sem procedimento definido');
-    if (none.revenueCents || none.suppliesCents || none.rentalCents || none.adSpendCents || none.appointments) byProcedure.push(none);
+    if (none.revenueCents || none.suppliesCents || none.rentalCents || none.adSpendCents || none.feesCents || none.appointments) byProcedure.push(none);
     byProcedure.sort((a, b) =>
       a.procedureId === NO_PROCEDURE ? 1 : b.procedureId === NO_PROCEDURE ? -1 : b.revenueCents - a.revenueCents || a.name.localeCompare(b.name, 'pt-BR'),
     );
 
-    const costsCents = suppliesCents + rentalCents + adSpendCents + expensesCents;
+    const costsCents = suppliesCents + rentalCents + adSpendCents + feesCents + expensesCents;
     const profitCents = revenueCents - costsCents;
     return {
       from,
@@ -287,6 +314,7 @@ export class FinanceService {
         suppliesCents,
         rentalCents,
         adSpendCents,
+        feesCents,
         expensesCents,
         expensesPendingCents,
         costsCents,

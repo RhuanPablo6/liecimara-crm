@@ -328,6 +328,8 @@ model Sale {
   amountCents           Int
   soldAt                DateTime
   status                SaleStatus            @default(ACTIVE)
+  // Previsão de recebimento do saldo em aberto (contas a receber)
+  dueAt                 DateTime?
   // Fotografia da atribuição no momento da venda (auditável)
   attributionConfidence AttributionConfidence
   adMetaId              String?
@@ -518,6 +520,10 @@ model SupplyPurchase {
   paymentMethod String
   /// 1 = à vista
   installments  Int      @default(1)
+  /// Vencimento da 1ª parcela (as demais, mês a mês). Nulo = data da compra (à vista) ou +1 mês (parcelado)
+  firstDueAt    DateTime?
+  /// Quantas parcelas já foram pagas (em ordem)
+  paidInstallments Int   @default(0)
   notes         String?
   createdById   String?
   createdAt     DateTime @default(now())
@@ -544,4 +550,14 @@ model Expense {
 
   @@index([date])
   @@map("expenses")
+}
+
+// ── Configurações (taxas da maquininha, saldo em conta...) ──
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
 }

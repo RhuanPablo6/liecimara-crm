@@ -86,6 +86,8 @@ const COPY = {
 interface Purchase {
   id: string;
   kind?: Kind;
+  firstDueAt?: string | null;
+  paidInstallments?: number;
   purchasedAt: string;
   supplier: string | null;
   items: Item[];
@@ -148,6 +150,8 @@ function PurchaseDialog({
   const [method, setMethod] = useState(purchase?.paymentMethod ?? 'PIX');
   const [split, setSplit] = useState((purchase?.installments ?? 1) > 1);
   const [installments, setInstallments] = useState(String(Math.max(2, purchase?.installments ?? 2)));
+  const [firstDue, setFirstDue] = useState(purchase?.firstDueAt ? spDay(purchase.firstDueAt) : '');
+  const [paidNow, setPaidNow] = useState(purchase ? (purchase.paidInstallments ?? 0) >= 1 : true);
   const [notes, setNotes] = useState(purchase?.notes ?? '');
   const { busy, error, run } = useAction();
 
@@ -272,9 +276,27 @@ function PurchaseDialog({
             </Field>
           )}
         </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={split ? 'Vencimento da 1ª parcela' : 'Vencimento'}>
+            <Input type="date" value={firstDue} onChange={(e) => setFirstDue(e.target.value)} />
+            <p className="text-xs text-muted-foreground">
+              {firstDue ? '' : split ? 'Em branco: um mês depois da compra.' : 'Em branco: no dia da compra.'}
+              {split ? ' As demais vencem mês a mês.' : ''}
+            </p>
+          </Field>
+          {!split && !purchase && (
+            <Field label="Já foi pago?">
+              <NativeSelect value={paidNow ? 'yes' : 'no'} onChange={(e) => setPaidNow(e.target.value === 'yes')}>
+                <option value="yes">Sim</option>
+                <option value="no">Não, vai para Contas a pagar</option>
+              </NativeSelect>
+            </Field>
+          )}
+        </div>
         {split && totalCents && n >= 2 && n <= 48 && (
           <p className="text-sm text-muted-foreground">
-            {n}x de <b>{brl(Math.round(totalCents / n))}</b>
+            {n}x de <b>{brl(Math.round(totalCents / n))}</b> · as parcelas aparecem em <b>Contas → A pagar</b>
+            {purchase?.paidInstallments ? ` (${Math.min(purchase.paidInstallments, n)} já paga(s))` : ''}
           </p>
         )}
 
@@ -300,6 +322,9 @@ function PurchaseDialog({
                 totalCents,
                 paymentMethod: method,
                 installments: n,
+                firstDueAt: firstDue || null,
+                // Na edição, o que já foi pago é mantido pela API.
+                ...(purchase ? {} : { paidInstallments: n === 1 ? (paidNow ? 1 : 0) : 0 }),
                 notes: notes || null,
               };
               if (purchase) await api(`/purchases/${purchase.id}`, { method: 'PATCH', body });

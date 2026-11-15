@@ -97,6 +97,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const [paid, setPaid] = useState('');
   const [method, setMethod] = useState('PIX');
   const [installments, setInstallments] = useState('1');
+  const [dueAt, setDueAt] = useState('');
   const lookup = useAction();
   const { busy, error, run } = useAction();
 
@@ -196,10 +197,17 @@ function SaleForm({ onDone }: { onDone: () => void }) {
         )}
         {received !== 'none' && <PaymentFields method={method} setMethod={setMethod} installments={installments} setInstallments={setInstallments} />}
       </div>
-      {received === 'partial' && amountCents && paidCents && paidCents < amountCents && (
-        <p className="text-sm text-muted-foreground">
-          Fica a receber: <b>{brl(amountCents - paidCents)}</b>
-        </p>
+      {received !== 'full' && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Previsão para receber o restante">
+            <Input type="date" min={soldAt} value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+          </Field>
+          {amountCents && (
+            <p className="self-end pb-2 text-sm text-muted-foreground">
+              Fica a receber: <b>{brl(amountCents - (paidCents && paidCents < amountCents ? paidCents : 0))}</b> (aparece em Contas → A receber)
+            </p>
+          )}
+        </div>
       )}
 
       <ErrorText>{error ?? lookup.error}</ErrorText>
@@ -216,6 +224,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
                 amountCents,
                 soldAt,
                 adMetaId: askOrigin && adMetaId ? adMetaId : null,
+                dueAt: received !== 'full' && dueAt ? dueAt : null,
                 payment:
                   received === 'none'
                     ? null
@@ -232,7 +241,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function ReceiveDialog({ sale, onDone }: { sale: any; onDone: () => void }) {
+export function ReceiveDialog({ sale, onDone }: { sale: any; onDone: () => void }) {
   const balance = sale.amountCents - sale.paidCents;
   const [amount, setAmount] = useState(centsToInput(balance));
   const [paidAt, setPaidAt] = useState(today());
