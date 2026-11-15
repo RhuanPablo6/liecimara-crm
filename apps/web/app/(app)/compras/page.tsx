@@ -24,7 +24,18 @@ const METHODS: Record<string, string> = {
 interface Item {
   name: string;
   quantity: string | null;
+  procedureId?: string | null;
+  amountCents?: number | null;
 }
+
+interface FormItem {
+  name: string;
+  quantity: string;
+  procedureId: string;
+  amount: string;
+}
+
+const emptyItem = (): FormItem => ({ name: '', quantity: '', procedureId: '', amount: '' });
 
 interface Purchase {
   id: string;
@@ -70,10 +81,18 @@ function PurchaseDialog({
   purchase: Purchase | null;
   onSaved: () => Promise<void>;
 }) {
+  const { data: procedures } = useApi<any[]>('/procedures');
   const [purchasedAt, setPurchasedAt] = useState(purchase ? spDay(purchase.purchasedAt) : spDay());
   const [supplier, setSupplier] = useState(purchase?.supplier ?? '');
-  const [items, setItems] = useState<{ name: string; quantity: string }[]>(
-    purchase?.items.length ? purchase.items.map((i) => ({ name: i.name, quantity: i.quantity ?? '' })) : [{ name: '', quantity: '' }],
+  const [items, setItems] = useState<FormItem[]>(
+    purchase?.items.length
+      ? purchase.items.map((i) => ({
+          name: i.name,
+          quantity: i.quantity ?? '',
+          procedureId: i.procedureId ?? '',
+          amount: i.amountCents ? centsToInput(i.amountCents) : '',
+        }))
+      : [emptyItem()],
   );
   const [total, setTotal] = useState(purchase ? centsToInput(purchase.totalCents) : '');
   const [method, setMethod] = useState(purchase?.paymentMethod ?? 'PIX');
@@ -85,14 +104,16 @@ function PurchaseDialog({
   const totalCents = parseBRL(total);
   const n = split ? Number.parseInt(installments, 10) : 1;
   const filled = items.filter((i) => i.name.trim());
-  const valid = !!purchasedAt && !!totalCents && filled.length > 0 && Number.isInteger(n) && n >= 1 && n <= 48;
+  const itemsSum = filled.reduce((t, i) => t + (parseBRL(i.amount) ?? 0), 0);
+  const overTotal = !!totalCents && itemsSum > totalCents;
+  const valid = !!purchasedAt && !!totalCents && filled.length > 0 && Number.isInteger(n) && n >= 1 && n <= 48 && !overTotal;
 
-  const setItem = (idx: number, patch: Partial<{ name: string; quantity: string }>) =>
+  const setItem = (idx: number, patch: Partial<FormItem>) =>
     setItems((cur) => cur.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{purchase ? 'Editar compra' : 'Nova compra de insumos'}</DialogTitle>
         </DialogHeader>
@@ -108,21 +129,46 @@ function PurchaseDialog({
 
         <div className="space-y-2">
           <Field label="Materiais comprados">
+            <p className="text-xs text-muted-foreground">
+              Escolha o procedimento em que o material é usado (toxina, preenchimento, bioestimulador…) para ver o custo de cada procedimento no
+              Financeiro. Com um material só, o valor dele é o total da compra.
+            </p>
             <div className="space-y-2">
               {items.map((it, idx) => (
-                <div key={idx} className="flex gap-2">
+                <div key={idx} className="grid grid-cols-[1fr_5.5rem_auto] gap-2 sm:grid-cols-[1fr_5.5rem_10rem_7rem_auto]">
                   <Input
                     aria-label={`Material ${idx + 1}`}
-                    placeholder="Material (ex.: Luvas de procedimento)"
+                    placeholder="Material (ex.: Toxina 100U)"
                     value={it.name}
                     onChange={(e) => setItem(idx, { name: e.target.value })}
                   />
                   <Input
                     aria-label={`Quantidade ${idx + 1}`}
-                    className="w-28 shrink-0"
                     placeholder="Qtd."
                     value={it.quantity}
                     onChange={(e) => setItem(idx, { quantity: e.target.value })}
+                  />
+                  <NativeSelect
+                    aria-label={`Procedimento ${idx + 1}`}
+                    className="col-span-2 sm:col-span-1"
+                    value={it.procedureId}
+                    onChange={(e) => setItem(idx, { procedureId: e.target.value })}
+                  >
+                    <option value="">Uso geral</option>
+                    {(procedures ?? [])
+                      .filter((p) => p.active || p.id === it.procedureId)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                  </NativeSelect>
+                  <Input
+                    aria-label={`Valor ${idx + 1}`}
+                    inputMode="decimal"
+                    placeholder="Valor R$"
+                    value={it.amount}
+                    onChange={(e) => setItem(idx, { amount: e.target.value })}
                   />
                   <Button
                     type="button"
@@ -138,7 +184,7 @@ function PurchaseDialog({
               ))}
             </div>
           </Field>
-          <Button type="button" size="sm" variant="outline" onClick={() => setItems((cur) => [...cur, { name: '', quantity: '' }])}>
+          <Button type="button" size="sm" variant="outline" onClick={() => setItems((cur) => [...cur, emptyItem()])}>
             <Plus /> Adicionar material
           </Button>
         </div>
@@ -146,6 +192,17 @@ function PurchaseDialog({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Valor total (R$)">
             <Input inputMode="decimal" placeholder="0,00" value={total} onChange={(e) => setTotal(e.target.value)} />
+            {itemsSum > 0 && (
+              <p className={overTotal ? 'text-xs text-red-700' : 'text-xs text-muted-foreground'}>
+                Soma dos materiais: {brl(itemsSum)}
+                {overTotal ? ' (maior que o total)' : ''}
+                {itemsSum !== totalCents && (
+                  <button type="button" className="ml-2 text-navy-600 underline" onClick={() => setTotal(centsToInput(itemsSum))}>
+                    usar como total
+                  </button>
+                )}
+              </p>
+            )}
           </Field>
           <Field label="Forma de pagamento">
             <NativeSelect value={method} onChange={(e) => setMethod(e.target.value)}>
@@ -186,7 +243,12 @@ function PurchaseDialog({
               const body = {
                 purchasedAt,
                 supplier: supplier || null,
-                items: filled.map((i) => ({ name: i.name.trim(), quantity: i.quantity.trim() || null })),
+                items: filled.map((i) => ({
+                  name: i.name.trim(),
+                  quantity: i.quantity.trim() || null,
+                  procedureId: i.procedureId || null,
+                  amountCents: parseBRL(i.amount),
+                })),
                 totalCents,
                 paymentMethod: method,
                 installments: n,
@@ -250,6 +312,8 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 }
 
 export default function PurchasesPage() {
+  const { data: procedures } = useApi<any[]>('/procedures');
+  const procName = (id?: string | null) => (id ? procedures?.find((p) => p.id === id)?.name : null);
   const [scope, setScope] = useState<'month' | 'all'>('month');
   const [month, setMonth] = useState(spDay().slice(0, 7));
   const [search, setSearch] = useState('');
@@ -353,6 +417,12 @@ export default function PurchasesPage() {
                             <li key={idx}>
                               {i.name}
                               {i.quantity && <span className="text-muted-foreground"> · {i.quantity}</span>}
+                              {i.amountCents ? <span className="text-muted-foreground"> · {brl(i.amountCents)}</span> : null}
+                              {procName(i.procedureId) && (
+                                <Badge variant="secondary" className="ml-2">
+                                  {procName(i.procedureId)}
+                                </Badge>
+                              )}
                             </li>
                           ))}
                         </ul>

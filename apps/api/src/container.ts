@@ -8,6 +8,7 @@ import type { Repos } from './ports/repositories.js';
 import { AttributionEngine } from './modules/attribution/AttributionEngine.js';
 import { AuditLogger } from './modules/audit/AuditLogger.js';
 import { AuthService } from './modules/auth/auth.js';
+import { FinanceService } from './modules/finance/FinanceService.js';
 import { FunnelService } from './modules/funnel/FunnelService.js';
 import { IntegrationService } from './modules/integrations/IntegrationService.js';
 import { MetaSyncService } from './modules/meta/MetaSyncService.js';
@@ -30,6 +31,7 @@ export function buildContainer(env: Env) {
   const engine = new AttributionEngine(repos, clock, { reopenAfterDays: env.LEAD_REOPEN_AFTER_DAYS });
   const funnel = new FunnelService(repos, clock);
   const metrics = new MetricsService(repos);
+  const finance = new FinanceService(repos);
   const auth = new AuthService(repos.users, env.JWT_SECRET, env.JWT_TTL_SECONDS);
   const audit = new AuditLogger(repos.audit);
   const ingestion = new WebhookIngestionService(repos, queue, clock, integrationEnv);
@@ -42,7 +44,7 @@ export function buildContainer(env: Env) {
   });
   const metaSync = new MetaSyncService(repos, vault, http, clock, integrationEnv, env.META_GRAPH_VERSION, engine);
 
-  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, auth, audit, ingestion, processor, integrations, metaSync };
+  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, auth, audit, ingestion, processor, integrations, metaSync };
 }
 
 export type Container = ReturnType<typeof buildContainer>;

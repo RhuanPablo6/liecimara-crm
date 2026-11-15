@@ -98,6 +98,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
   // Estados dos formulários rápidos
   const [apptAt, setApptAt] = useState('');
+  const [apptProc, setApptProc] = useState<string | null>(null);
   const [saleProc, setSaleProc] = useState('');
   const [saleValue, setSaleValue] = useState('');
   const [saleAd, setSaleAd] = useState('');
@@ -275,7 +276,31 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   {(close) => (
                     <div className="space-y-4">
                       <QuickDateTime value={apptAt} onChange={setApptAt} />
-                      <Button disabled={!apptAt || act.busy} onClick={() => call(() => api(`/leads/${id}/appointments`, { method: 'POST', body: { scheduledFor: apptAt } }), close)}>
+                      <Field label="Procedimento">
+                        <NativeSelect value={apptProc ?? lead.procedureInterestId ?? ''} onChange={(e) => setApptProc(e.target.value)}>
+                          <option value="">Não definido</option>
+                          {procedures
+                            ?.filter((p) => p.active || p.id === lead.procedureInterestId)
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                        </NativeSelect>
+                      </Field>
+                      <Button
+                        disabled={!apptAt || act.busy}
+                        onClick={() =>
+                          call(
+                            () =>
+                              api(`/leads/${id}/appointments`, {
+                                method: 'POST',
+                                body: { scheduledFor: apptAt, procedureId: (apptProc ?? lead.procedureInterestId) || null },
+                              }),
+                            close,
+                          )
+                        }
+                      >
                         Confirmar agendamento
                       </Button>
                     </div>

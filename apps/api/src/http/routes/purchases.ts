@@ -2,18 +2,13 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Container } from '../../container.js';
-import { DomainError } from '../../domain/errors.js';
 import { SUPPLY_PAYMENT_METHODS, type SupplyPurchase } from '../../domain/types.js';
+import { dayRange, dayToDate, isDay } from '../../shared/days.js';
 import type { Guard } from '../server.js';
 
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD');
+const day = z.string().refine(isDay, 'Data no formato AAAA-MM-DD');
 
-/** Dia civil de São Paulo → meio-dia local (15:00 UTC), para nunca "pular" de dia em outro fuso. */
-export function dayToDate(d: string): Date {
-  const date = new Date(`${d}T15:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) throw new DomainError('VALIDATION', 'Data inválida');
-  return date;
-}
+export { dayToDate };
 
 const optionalText = (max: number) =>
   z
@@ -25,9 +20,12 @@ const optionalText = (max: number) =>
 const itemSchema = z.object({
   name: z.string().trim().min(1, 'Informe o material').max(200),
   quantity: optionalText(50),
+  procedureId: z.string().min(1).nullish().transform((v) => v ?? null),
+  amountCents: z.number().int().positive().max(10_000_000_00).nullish().transform((v) => v ?? null),
 });
 
-const purchaseSchema = z.object({
+const purchaseSchema = z
+  .object({
   purchasedAt: day,
   supplier: optionalText(200),
   items: z.array(itemSchema).min(1, 'Informe ao menos um material').max(100),
@@ -35,7 +33,11 @@ const purchaseSchema = z.object({
   paymentMethod: z.enum(SUPPLY_PAYMENT_METHODS),
   installments: z.number().int().min(1).max(48).default(1),
   notes: optionalText(2000),
-});
+  })
+  .refine((b) => b.items.reduce((s, i) => s + (i.amountCents ?? 0), 0) <= b.totalCents, {
+    message: 'A soma dos valores dos materiais passa do valor total da compra',
+    path: ['items'],
+  });
 
 function toData(b: z.infer<typeof purchaseSchema>) {
   return { ...b, purchasedAt: dayToDate(b.purchasedAt) };
@@ -57,13 +59,7 @@ export function registerPurchaseRoutes(app: FastifyInstance, c: Container, guard
   /** Lista as compras. ?from=AAAA-MM-DD&to=AAAA-MM-DD (to inclusivo). Sem período = todas. */
   app.get('/purchases', { preHandler: guard('purchases:read') }, async (req) => {
     const q = z.object({ from: day.optional(), to: day.optional() }).parse(req.query);
-    const range =
-      q.from || q.to
-        ? {
-            from: q.from ? new Date(`${q.from}T03:00:00.000Z`) : new Date(0),
-            to: q.to ? new Date(new Date(`${q.to}T03:00:00.000Z`).getTime() + 86_400_000) : new Date(8.64e15),
-          }
-        : undefined;
+    const range = q.from || q.to ? dayRange(q.from ?? '2000-01-01', q.to ?? '2999-12-31') : undefined;
     const items = await c.repos.purchases.list(range);
     return { items, summary: summarize(items) };
   });

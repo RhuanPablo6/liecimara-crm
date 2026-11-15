@@ -98,6 +98,8 @@ export interface Ad {
   status: string | null;
   /** Código curto para a mensagem pronta (ex.: "U1"); definido no CRM. */
   code?: string | null;
+  /** Procedimento divulgado pelo anúncio (definido no CRM). */
+  procedureId?: string | null;
 }
 export interface AdInsightDaily {
   adMetaId: string;
@@ -206,6 +208,10 @@ export type SupplyPaymentMethod = (typeof SUPPLY_PAYMENT_METHODS)[number];
 export interface SupplyItem {
   name: string;
   quantity: string | null;
+  /** Procedimento em que o material é usado (para o custo por procedimento). */
+  procedureId?: string | null;
+  /** Valor deste item; se ausente e a compra tiver um item só, vale o total. */
+  amountCents?: number | null;
 }
 
 /** Compra de insumos/materiais da clínica. */
@@ -218,6 +224,20 @@ export interface SupplyPurchase {
   paymentMethod: SupplyPaymentMethod;
   installments: number;
   notes: string | null;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Despesa da clínica (aluguel, energia, condomínio...). */
+export interface Expense {
+  id: string;
+  date: Date;
+  category: string;
+  description: string | null;
+  amountCents: number;
+  paymentMethod: string | null;
+  paid: boolean;
   createdById: string | null;
   createdAt: Date;
   updatedAt: Date;

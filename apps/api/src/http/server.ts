@@ -7,6 +7,7 @@ import { DomainError, UnauthorizedError } from '../domain/errors.js';
 import type { TokenClaims } from '../modules/auth/auth.js';
 import { assertCan, type Permission } from '../modules/auth/rbac.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerFinanceRoutes } from './routes/finance.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
 import { registerLeadRoutes } from './routes/leads.js';
 import { registerPurchaseRoutes } from './routes/purchases.js';
@@ -46,7 +47,8 @@ export function buildServer(c: Container) {
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ZodError) {
-      return reply.status(400).send({ error: 'VALIDATION', message: 'Dados inválidos', issues: err.issues });
+      const custom = err.issues.find((i) => i.code === 'custom');
+      return reply.status(400).send({ error: 'VALIDATION', message: custom?.message ?? 'Dados inválidos', issues: err.issues });
     }
     if (err instanceof DomainError) {
       return reply.status(err.httpStatus).send({ error: err.code, message: err.message });
@@ -74,6 +76,7 @@ export function buildServer(c: Container) {
   registerReportRoutes(app, c, guard);
   registerIntegrationRoutes(app, c, guard);
   registerPurchaseRoutes(app, c, guard);
+  registerFinanceRoutes(app, c, guard);
 
   return app;
 }

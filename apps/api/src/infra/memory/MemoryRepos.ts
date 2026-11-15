@@ -13,6 +13,7 @@ import type {
   Campaign,
   Contact,
   Conversation,
+  Expense,
   InboundEvent,
   IntegrationConnection,
   IntegrationError,
@@ -48,6 +49,7 @@ interface State {
   sales: Map<string, Sale>;
   payments: Map<string, Payment>;
   purchases: Map<string, SupplyPurchase>;
+  expenses: Map<string, Expense>;
   performed: Map<string, ProcedurePerformed>;
   reminders: Map<string, Reminder>;
   connections: Map<string, IntegrationConnection>;
@@ -73,6 +75,7 @@ const emptyState = (): State => ({
   sales: new Map(),
   payments: new Map(),
   purchases: new Map(),
+  expenses: new Map(),
   performed: new Map(),
   reminders: new Map(),
   connections: new Map(),
@@ -261,14 +264,20 @@ export class MemoryRepos implements Repos {
       this.s.ads.set(metaId, { ...ad, code });
       return clone({ ...ad, code });
     },
+    setAdProcedure: async (metaId: string, procedureId: string | null) => {
+      const ad = this.s.ads.get(metaId);
+      if (!ad) throw new NotFoundError('Anúncio', metaId);
+      this.s.ads.set(metaId, { ...ad, procedureId });
+      return clone({ ...ad, procedureId });
+    },
     upsertCampaign: async (c: Campaign) => void this.s.campaigns.set(c.metaId, clone(c)),
     upsertAdSet: async (a: AdSet) => void this.s.adSets.set(a.metaId, clone(a)),
-    upsertAd: async (a: Ad) => void this.s.ads.set(a.metaId, clone({ ...a, code: a.code ?? this.s.ads.get(a.metaId)?.code ?? null })),
+    upsertAd: async (a: Ad) => void this.s.ads.set(a.metaId, clone({ ...a, code: a.code ?? this.s.ads.get(a.metaId)?.code ?? null, procedureId: a.procedureId ?? this.s.ads.get(a.metaId)?.procedureId ?? null })),
     upsertInsight: async (i: AdInsightDaily) => void this.s.insights.set(`${i.adMetaId}|${i.date}`, clone(i)),
     upsertCampaigns: async (rows: Campaign[]) => rows.forEach((c) => this.s.campaigns.set(c.metaId, clone(c))),
     upsertAdSets: async (rows: AdSet[]) => rows.forEach((a) => this.s.adSets.set(a.metaId, clone(a))),
     upsertAds: async (rows: Ad[]) =>
-      rows.forEach((a) => this.s.ads.set(a.metaId, clone({ ...a, code: a.code ?? this.s.ads.get(a.metaId)?.code ?? null }))),
+      rows.forEach((a) => this.s.ads.set(a.metaId, clone({ ...a, code: a.code ?? this.s.ads.get(a.metaId)?.code ?? null, procedureId: a.procedureId ?? this.s.ads.get(a.metaId)?.procedureId ?? null }))),
     upsertInsights: async (rows: AdInsightDaily[]) => rows.forEach((i) => this.s.insights.set(`${i.adMetaId}|${i.date}`, clone(i))),
     listAds: async () => clone([...this.s.ads.values()]),
     listCampaigns: async () => clone([...this.s.campaigns.values()]),
@@ -286,6 +295,13 @@ export class MemoryRepos implements Repos {
     findById: async (id: string) => clone(this.s.procedures.get(id) ?? null),
     list: async () => clone([...this.s.procedures.values()]),
     create: async (d: Omit<Procedure, 'id'>) => insert(this.s.procedures, d, 'prc_'),
+    update: async (id: string, d: Partial<Procedure>) => {
+      if (!this.s.procedures.has(id)) throw new NotFoundError('Procedimento', id);
+      if (d.name && [...this.s.procedures.values()].some((p) => p.name === d.name && p.id !== id)) {
+        throw new DomainError('PROCEDURE_NAME_TAKEN', 'Já existe um procedimento com esse nome', 409);
+      }
+      return patch(this.s.procedures, id, d);
+    },
   };
 
   appointments = {
@@ -330,6 +346,27 @@ export class MemoryRepos implements Repos {
         [...this.s.purchases.values()]
           .filter((p) => !r || inRange(p.purchasedAt, r))
           .sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime()),
+      ),
+  };
+
+  expenses = {
+    create: async (d: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const now = new Date();
+      return insert(this.s.expenses, { ...d, createdAt: now, updatedAt: now }, 'exp_');
+    },
+    update: async (id: string, d: Partial<Expense>) => {
+      if (!this.s.expenses.has(id)) throw new NotFoundError('Despesa', id);
+      return patch(this.s.expenses, id, { ...d, updatedAt: new Date() });
+    },
+    delete: async (id: string) => {
+      if (!this.s.expenses.delete(id)) throw new NotFoundError('Despesa', id);
+    },
+    findById: async (id: string) => clone(this.s.expenses.get(id) ?? null),
+    list: async (r?: DateRange) =>
+      clone(
+        [...this.s.expenses.values()]
+          .filter((e) => !r || inRange(e.date, r))
+          .sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime()),
       ),
   };
 

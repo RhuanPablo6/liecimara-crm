@@ -11,6 +11,7 @@ import type {
   Campaign,
   Contact,
   Conversation,
+  Expense,
   InboundEvent,
   InboundEventStatus,
   IntegrationConnection,
@@ -109,6 +110,8 @@ export interface AdRepo {
   findAdByCode(code: string): Promise<Ad | null>;
   /** Define (ou remove, com null) o código do anúncio. Rejeita código já usado por outro anúncio. */
   setAdCode(metaId: string, code: string | null): Promise<Ad>;
+  /** Liga (ou desliga, com null) o anúncio a um procedimento. */
+  setAdProcedure(metaId: string, procedureId: string | null): Promise<Ad>;
   upsertCampaign(c: Campaign): Promise<void>;
   upsertAdSet(a: AdSet): Promise<void>;
   upsertAd(a: Ad): Promise<void>;
@@ -128,6 +131,7 @@ export interface ProcedureRepo {
   findById(id: string): Promise<Procedure | null>;
   list(): Promise<Procedure[]>;
   create(data: Create<Procedure>): Promise<Procedure>;
+  update(id: string, data: Partial<Omit<Procedure, 'id'>>): Promise<Procedure>;
 }
 
 export interface AppointmentRepo {
@@ -160,6 +164,15 @@ export interface SupplyPurchaseRepo {
   findById(id: string): Promise<SupplyPurchase | null>;
   /** Mais recentes primeiro. Sem período = todas. */
   list(range?: DateRange): Promise<SupplyPurchase[]>;
+}
+
+export interface ExpenseRepo {
+  create(data: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>): Promise<Expense>;
+  update(id: string, data: Partial<Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Expense>;
+  delete(id: string): Promise<void>;
+  findById(id: string): Promise<Expense | null>;
+  /** Mais antigas primeiro. Sem período = todas. */
+  list(range?: DateRange): Promise<Expense[]>;
 }
 
 export interface ProcedurePerformedRepo {
@@ -221,6 +234,7 @@ export interface Repos {
   sales: SaleRepo;
   payments: PaymentRepo;
   purchases: SupplyPurchaseRepo;
+  expenses: ExpenseRepo;
   performed: ProcedurePerformedRepo;
   reminders: ReminderRepo;
   connections: ConnectionRepo;

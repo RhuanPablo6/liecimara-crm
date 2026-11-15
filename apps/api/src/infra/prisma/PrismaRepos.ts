@@ -190,6 +190,14 @@ export class PrismaRepos implements Repos {
         throw err;
       }
     },
+    setAdProcedure: async (metaId: string, procedureId: string | null) => {
+      try {
+        return as<any>(await this.db.ad.update({ where: { metaId }, data: { procedureId } }));
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') throw new NotFoundError('Anúncio', metaId);
+        throw err;
+      }
+    },
     upsertCampaign: async (c: any) => void (await this.db.campaign.upsert({ where: { metaId: c.metaId }, create: c, update: c })),
     upsertAdSet: async (a: any) => void (await this.db.adSet.upsert({ where: { metaId: a.metaId }, create: a, update: a })),
     upsertAd: async (a: any) => void (await this.db.ad.upsert({ where: { metaId: a.metaId }, create: a, update: a })),
@@ -266,7 +274,27 @@ export class PrismaRepos implements Repos {
   procedures = {
     findById: async (id: string) => as<any>(await this.db.procedure.findUnique({ where: { id } })),
     list: async () => as<any>(await this.db.procedure.findMany({ orderBy: { name: 'asc' } })),
-    create: async (d: any) => as<any>(await this.db.procedure.create({ data: d })),
+    create: async (d: any) => {
+      try {
+        return as<any>(await this.db.procedure.create({ data: d }));
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new DomainError('PROCEDURE_NAME_TAKEN', 'Já existe um procedimento com esse nome', 409);
+        }
+        throw err;
+      }
+    },
+    update: async (id: string, d: any) => {
+      try {
+        return as<any>(await this.db.procedure.update({ where: { id }, data: d }));
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') throw new NotFoundError('Procedimento', id);
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new DomainError('PROCEDURE_NAME_TAKEN', 'Já existe um procedimento com esse nome', 409);
+        }
+        throw err;
+      }
+    },
   };
 
   appointments = {
@@ -317,6 +345,34 @@ export class PrismaRepos implements Repos {
         await this.db.supplyPurchase.findMany({
           where: r ? { purchasedAt: inRange(r) } : undefined,
           orderBy: [{ purchasedAt: 'desc' }, { createdAt: 'desc' }],
+        }),
+      ),
+  };
+
+  expenses = {
+    create: async (d: any) => as<any>(await this.db.expense.create({ data: d })),
+    update: async (id: string, d: any) => {
+      try {
+        return as<any>(await this.db.expense.update({ where: { id }, data: d }));
+      } catch (e: any) {
+        if (e?.code === 'P2025') throw new NotFoundError('Despesa', id);
+        throw e;
+      }
+    },
+    delete: async (id: string) => {
+      try {
+        await this.db.expense.delete({ where: { id } });
+      } catch (e: any) {
+        if (e?.code === 'P2025') throw new NotFoundError('Despesa', id);
+        throw e;
+      }
+    },
+    findById: async (id: string) => as<any>(await this.db.expense.findUnique({ where: { id } })),
+    list: async (r?: DateRange) =>
+      as<any>(
+        await this.db.expense.findMany({
+          where: r ? { date: inRange(r) } : undefined,
+          orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
         }),
       ),
   };

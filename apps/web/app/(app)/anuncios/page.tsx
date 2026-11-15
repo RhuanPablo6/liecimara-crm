@@ -39,6 +39,44 @@ function CodeCell({ ad, onSaved }: { ad: any; onSaved: () => Promise<void> }) {
   );
 }
 
+/** Procedimento que o anúncio divulga: o gasto dele entra no custo desse procedimento no Financeiro. */
+function ProcedureCell({ ad, procedures, sameCampaign, onSaved }: { ad: any; procedures: any[]; sameCampaign: number; onSaved: () => Promise<void> }) {
+  const { busy, error, run } = useAction();
+  const [justSet, setJustSet] = useState(false);
+  const save = (procedureId: string | null, applyToCampaign = false) =>
+    run(async () => {
+      await api(`/ads/${encodeURIComponent(ad.metaId)}/procedure`, { method: 'PATCH', body: { procedureId, applyToCampaign } });
+      setJustSet(!applyToCampaign && !!procedureId && sameCampaign > 0);
+      await onSaved();
+    });
+  return (
+    <div className="space-y-1">
+      <NativeSelect
+        aria-label={`Procedimento do anúncio ${ad.name}`}
+        className="h-8 w-56"
+        value={ad.procedureId ?? ''}
+        disabled={busy}
+        onChange={(e) => save(e.target.value || null)}
+      >
+        <option value="">Não definido</option>
+        {procedures
+          .filter((p) => p.active || p.id === ad.procedureId)
+          .map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+      </NativeSelect>
+      {justSet && ad.procedureId && (
+        <button className="text-xs text-navy-600 underline" disabled={busy} onClick={() => save(ad.procedureId, true)}>
+          Aplicar aos outros {sameCampaign} anúncios da campanha
+        </button>
+      )}
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
 function CopyMessage({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -62,6 +100,7 @@ function CopyMessage({ text }: { text: string }) {
 
 export default function AdsPage() {
   const { data: ads, reload } = useApi<any[]>('/ads');
+  const { data: procedures } = useApi<any[]>('/procedures');
   const [filter, setFilter] = useState<'active' | 'all'>('active');
   const [search, setSearch] = useState('');
   const gen = useAction();
@@ -99,6 +138,7 @@ export default function AdsPage() {
               No Gerenciador de Anúncios, edite o anúncio e, em <b>Modelo de mensagem / Mensagem pronta</b> do WhatsApp, cole o texto e publique.
             </li>
             <li>Quando chegar um paciente, em <b>Leads → Novo lead</b>, digite o código que veio na mensagem.</li>
+            <li>Escolha o <b>procedimento</b> de cada anúncio: o gasto dele entra no custo desse procedimento no <b>Financeiro</b>.</li>
           </ol>
         </CardContent>
       </Card>
@@ -141,6 +181,7 @@ export default function AdsPage() {
                   <TR>
                     <TH>Código</TH>
                     <TH>Anúncio</TH>
+                    <TH>Procedimento</TH>
                     <TH>Situação</TH>
                     <TH>Mensagem pronta</TH>
                   </TR>
@@ -154,6 +195,14 @@ export default function AdsPage() {
                       <TD className="min-w-[220px] align-top">
                         <p className="font-medium">{a.name}</p>
                         <p className="text-xs text-muted-foreground">{a.campaignName ?? 'Campanha não sincronizada'}</p>
+                      </TD>
+                      <TD className="align-top">
+                        <ProcedureCell
+                          ad={a}
+                          procedures={procedures ?? []}
+                          sameCampaign={(ads ?? []).filter((x) => x.campaignMetaId === a.campaignMetaId && x.metaId !== a.metaId).length}
+                          onSaved={reload}
+                        />
                       </TD>
                       <TD className="align-top">
                         <Badge variant={a.status === 'ACTIVE' ? 'success' : 'secondary'}>{a.status === 'ACTIVE' ? 'Ativo' : 'Pausado/encerrado'}</Badge>

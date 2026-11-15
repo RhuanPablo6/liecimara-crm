@@ -158,6 +158,8 @@ model Ad {
   // Código curto (ex.: "U1") usado na mensagem pronta do anúncio para a recepção
   // identificar a origem quando não há referência oficial do WhatsApp.
   code           String?  @unique
+  // Procedimento que o anúncio divulga (definido no CRM): usado no financeiro por procedimento.
+  procedureId    String?
   updatedAt      DateTime @updatedAt
 
   @@index([campaignMetaId])
@@ -521,4 +523,23 @@ model SupplyPurchase {
 
   @@index([purchasedAt])
   @@map("supply_purchases")
+}
+
+// ── Despesas da clínica (aluguel, energia, condomínio...) ──
+
+model Expense {
+  id            String   @id @default(cuid())
+  /// Data de vencimento/pagamento (dia civil de São Paulo, gravado ao meio-dia local)
+  date          DateTime
+  category      String
+  description   String?
+  amountCents   Int
+  paymentMethod String?
+  paid          Boolean  @default(true)
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([date])
+  @@map("expenses")
 }
