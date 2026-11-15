@@ -2,6 +2,7 @@
 // Usada nos testes automatizados e em demonstrações sem banco.
 // `tx` faz snapshot e restaura o estado em caso de erro (semântica de rollback).
 
+import { DomainError, NotFoundError } from '../../domain/errors.js';
 import type {
   Ad,
   AdInsightDaily,
@@ -247,13 +248,24 @@ export class MemoryRepos implements Repos {
 
   ads = {
     findAd: async (metaId: string) => clone(this.s.ads.get(metaId) ?? null),
+    findAdByCode: async (code: string) => clone([...this.s.ads.values()].find((a) => a.code === code) ?? null),
+    setAdCode: async (metaId: string, code: string | null) => {
+      const ad = this.s.ads.get(metaId);
+      if (!ad) throw new NotFoundError('Anúncio', metaId);
+      if (code && [...this.s.ads.values()].some((a) => a.code === code && a.metaId !== metaId)) {
+        throw new DomainError('AD_CODE_TAKEN', `O código ${code} já está em uso por outro anúncio`, 409);
+      }
+      this.s.ads.set(metaId, { ...ad, code });
+      return clone({ ...ad, code });
+    },
     upsertCampaign: async (c: Campaign) => void this.s.campaigns.set(c.metaId, clone(c)),
     upsertAdSet: async (a: AdSet) => void this.s.adSets.set(a.metaId, clone(a)),
-    upsertAd: async (a: Ad) => void this.s.ads.set(a.metaId, clone(a)),
+    upsertAd: async (a: Ad) => void this.s.ads.set(a.metaId, clone({ ...a, code: a.code ?? this.s.ads.get(a.metaId)?.code ?? null })),
     upsertInsight: async (i: AdInsightDaily) => void this.s.insights.set(`${i.adMetaId}|${i.date}`, clone(i)),
     upsertCampaigns: async (rows: Campaign[]) => rows.forEach((c) => this.s.campaigns.set(c.metaId, clone(c))),
     upsertAdSets: async (rows: AdSet[]) => rows.forEach((a) => this.s.adSets.set(a.metaId, clone(a))),
-    upsertAds: async (rows: Ad[]) => rows.forEach((a) => this.s.ads.set(a.metaId, clone(a))),
+    upsertAds: async (rows: Ad[]) =>
+      rows.forEach((a) => this.s.ads.set(a.metaId, clone({ ...a, code: a.code ?? this.s.ads.get(a.metaId)?.code ?? null }))),
     upsertInsights: async (rows: AdInsightDaily[]) => rows.forEach((i) => this.s.insights.set(`${i.adMetaId}|${i.date}`, clone(i))),
     listAds: async () => clone([...this.s.ads.values()]),
     listCampaigns: async () => clone([...this.s.campaigns.values()]),

@@ -62,7 +62,10 @@ export default function ReportsPage() {
                   {ads?.map((a) => (
                     <TR key={a.adMetaId}>
                       <TD className="min-w-[200px]">
-                        <p className="font-medium">{a.adName}</p>
+                        <p className="font-medium">
+                          {a.adCode && <span className="mr-1 rounded bg-gold-50 px-1.5 py-0.5 font-mono text-xs text-gold-700">{a.adCode}</span>}
+                          {a.adName}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {a.campaignName} · {a.adSetName}
                         </p>

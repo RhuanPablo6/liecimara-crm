@@ -96,6 +96,8 @@ export interface Ad {
   campaignMetaId: string;
   name: string;
   status: string | null;
+  /** Código curto para a mensagem pronta (ex.: "U1"); definido no CRM. */
+  code?: string | null;
 }
 export interface AdInsightDaily {
   adMetaId: string;

@@ -105,6 +105,9 @@ export interface StageHistoryRepo {
 
 export interface AdRepo {
   findAd(metaId: string): Promise<Ad | null>;
+  findAdByCode(code: string): Promise<Ad | null>;
+  /** Define (ou remove, com null) o código do anúncio. Rejeita código já usado por outro anúncio. */
+  setAdCode(metaId: string, code: string | null): Promise<Ad>;
   upsertCampaign(c: Campaign): Promise<void>;
   upsertAdSet(a: AdSet): Promise<void>;
   upsertAd(a: Ad): Promise<void>;

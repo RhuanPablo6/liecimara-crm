@@ -182,6 +182,7 @@ export class MetricsService {
       return {
         adMetaId,
         adName: ad?.name ?? '(anúncio não sincronizado)',
+        adCode: ad?.code ?? null,
         adSetName: ad ? adSetName.get(ad.adSetMetaId) ?? null : null,
         campaignMetaId: ad?.campaignMetaId ?? null,
         campaignName: ad ? campaignName.get(ad.campaignMetaId) ?? null : null,

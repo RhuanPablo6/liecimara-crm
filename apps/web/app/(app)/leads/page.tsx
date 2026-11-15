@@ -17,7 +17,17 @@ function NewLeadDialog() {
   const router = useRouter();
   const [waId, setWaId] = useState('55');
   const [name, setName] = useState('');
+  const [adCode, setAdCode] = useState('');
+  const [adMetaId, setAdMetaId] = useState('');
+  const { data: ads } = useApi<any[]>('/ads');
   const { busy, error, run } = useAction();
+
+  const code = adCode.trim().toUpperCase().replace(/^[([{]+|[)\]}]+$/g, '');
+  const matched = code ? (ads ?? []).find((a) => a.code === code) : null;
+  const pickable = (ads ?? [])
+    .filter((a) => a.status === 'ACTIVE' || a.code)
+    .sort((a, b) => `${a.code ?? '~'}|${a.name}`.localeCompare(`${b.code ?? '~'}|${b.name}`, 'pt-BR'));
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -27,21 +37,56 @@ function NewLeadDialog() {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo lead manual</DialogTitle>
+          <DialogTitle>Novo lead</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-muted-foreground">Use quando o paciente chegou por telefone, indicação ou presencialmente. A origem fica como desconhecida até ser informada.</p>
+        <p className="text-sm text-muted-foreground">
+          Se a mensagem do paciente tiver um código entre parênteses, como <b>(U1)</b>, digite-o abaixo: o lead já fica ligado ao anúncio.
+        </p>
         <Field label="WhatsApp (DDI + DDD + número)">
           <Input inputMode="numeric" value={waId} onChange={(e) => setWaId(e.target.value.replace(/\D/g, ''))} />
         </Field>
         <Field label="Nome">
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
+        <Field label="Código do anúncio (opcional)">
+          <Input
+            className="font-mono uppercase"
+            placeholder="ex.: U1"
+            maxLength={12}
+            value={adCode}
+            onChange={(e) => {
+              setAdCode(e.target.value.replace(/\s/g, ''));
+              setAdMetaId('');
+            }}
+          />
+        </Field>
+        {code && (
+          <p className={matched ? 'text-sm text-emerald-700' : 'text-sm text-red-700'}>
+            {matched ? `Anúncio: ${matched.name}${matched.campaignName ? ` · ${matched.campaignName}` : ''}` : `Nenhum anúncio com o código ${code}`}
+          </p>
+        )}
+        {!code && (
+          <Field label="Ou escolha o anúncio (se o paciente apagou o código)">
+            <NativeSelect value={adMetaId} onChange={(e) => setAdMetaId(e.target.value)}>
+              <option value="">Origem não informada</option>
+              {pickable.map((a) => (
+                <option key={a.metaId} value={a.metaId}>
+                  {a.code ? `[${a.code}] ` : ''}
+                  {a.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        )}
         <ErrorText>{error}</ErrorText>
         <Button
-          disabled={busy}
+          disabled={busy || (!!code && !matched)}
           onClick={() =>
             run(async () => {
-              const lead = await api('/leads', { method: 'POST', body: { waId, name: name || undefined } });
+              const lead = await api('/leads', {
+                method: 'POST',
+                body: { waId, name: name || undefined, adCode: code || undefined, adMetaId: code ? undefined : adMetaId || undefined },
+              });
               router.push(`/leads/${lead.id}`);
             })
           }

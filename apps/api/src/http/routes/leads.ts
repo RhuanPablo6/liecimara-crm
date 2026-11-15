@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Container } from '../../container.js';
 import { CONFIDENCE_LABELS_PT, LOST_REASON_LABELS_PT, STAGE_LABELS_PT, type Lead } from '../../domain/types.js';
+import { DomainError } from '../../domain/errors.js';
+import { nextFreeCodes, normalizeAdCode, suggestedMessage } from '../../modules/ads/adCodes.js';
 import { actorOf, type Guard } from '../server.js';
 
 const stageEnum = z.enum(['NEW', 'CONTACTED', 'SCHEDULED', 'ATTENDED', 'WON', 'LOST']);
@@ -77,8 +79,34 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
   });
 
   app.post('/leads', { preHandler: guard('leads:write') }, async (req) => {
-    const b = z.object({ waId: z.string().min(10), name: z.string().optional(), procedureInterestId: z.string().nullish() }).parse(req.body);
-    return c.funnel.createLeadManually(b, actorOf(req));
+    const b = z
+      .object({
+        waId: z.string().min(10),
+        name: z.string().optional(),
+        procedureInterestId: z.string().nullish(),
+        // Origem: código do anúncio (da mensagem pronta) OU o anúncio escolhido na lista.
+        adCode: z.string().trim().max(20).optional().or(z.literal('')),
+        adMetaId: z.string().trim().optional().or(z.literal('')),
+      })
+      .parse(req.body);
+    let attribution: { adMetaId: string; note: string } | null = null;
+    if (b.adCode) {
+      let code: string;
+      try {
+        code = normalizeAdCode(b.adCode);
+      } catch (e) {
+        throw new DomainError('VALIDATION', (e as Error).message);
+      }
+      const ad = await c.repos.ads.findAdByCode(code);
+      if (!ad) throw new DomainError('AD_CODE_NOT_FOUND', `Nenhum anúncio com o código ${code}. Confira em Anúncios.`, 404);
+      attribution = { adMetaId: ad.metaId, note: `Código do anúncio na mensagem do paciente: ${code}` };
+    } else if (b.adMetaId) {
+      attribution = { adMetaId: b.adMetaId, note: 'Anúncio informado pela recepção no cadastro do lead' };
+    }
+    return c.funnel.createLeadManually(
+      { waId: b.waId, name: b.name, procedureInterestId: b.procedureInterestId, attribution },
+      actorOf(req),
+    );
   });
 
   app.get('/leads/:id', { preHandler: guard('leads:read') }, async (req) => {
@@ -198,10 +226,47 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
     return p;
   });
 
+  // ── Códigos de anúncio ─────────────────────────────────────
+  app.patch('/ads/:metaId/code', { preHandler: guard('procedures:manage') }, async (req) => {
+    const { metaId } = z.object({ metaId: z.string().min(1) }).parse(req.params);
+    const b = z.object({ code: z.string().nullable() }).parse(req.body);
+    let code: string | null = null;
+    if (b.code && b.code.trim()) {
+      try {
+        code = normalizeAdCode(b.code);
+      } catch (e) {
+        throw new DomainError('VALIDATION', (e as Error).message);
+      }
+    }
+    const before = await c.repos.ads.findAd(metaId);
+    const ad = await c.repos.ads.setAdCode(metaId, code);
+    await c.audit.record({ userId: req.user!.sub, action: 'ad.code', entityType: 'Ad', entityId: metaId, before: { code: before?.code ?? null }, after: { code }, ip: req.ip });
+    return { ...ad, suggestedMessage: ad.code ? suggestedMessage(ad.code) : null };
+  });
+
+  /** Gera códigos (A1, A2, ...) para os anúncios sem código. Por padrão só os ativos. */
+  app.post('/ads/codes/generate', { preHandler: guard('procedures:manage') }, async (req) => {
+    const b = z.object({ includeInactive: z.boolean().optional() }).parse(req.body ?? {});
+    const [ads, campaigns] = await Promise.all([c.repos.ads.listAds(), c.repos.ads.listCampaigns()]);
+    const cn = new Map(campaigns.map((x) => [x.metaId, x.name]));
+    const used = ads.map((a) => a.code).filter((x): x is string => !!x);
+    const pending = ads
+      .filter((a) => !a.code && (b.includeInactive || a.status === 'ACTIVE'))
+      .sort((x, y) => `${cn.get(x.campaignMetaId) ?? ''}|${x.name}`.localeCompare(`${cn.get(y.campaignMetaId) ?? ''}|${y.name}`, 'pt-BR'));
+    const codes = nextFreeCodes(used, pending.length);
+    for (const [i, ad] of pending.entries()) await c.repos.ads.setAdCode(ad.metaId, codes[i]!);
+    await c.audit.record({ userId: req.user!.sub, action: 'ad.codes.generate', entityType: 'Ad', entityId: null, after: { count: pending.length }, ip: req.ip });
+    return { generated: pending.length };
+  });
+
   app.get('/ads', { preHandler: guard('leads:read') }, async () => {
     const [ads, campaigns] = await Promise.all([c.repos.ads.listAds(), c.repos.ads.listCampaigns()]);
     const cn = new Map(campaigns.map((x) => [x.metaId, x.name]));
-    return ads.map((a) => ({ ...a, campaignName: cn.get(a.campaignMetaId) ?? null }));
+    return ads.map((a) => ({
+      ...a,
+      campaignName: cn.get(a.campaignMetaId) ?? null,
+      suggestedMessage: a.code ? suggestedMessage(a.code) : null,
+    }));
   });
 
   app.get('/audit', { preHandler: guard('audit:read') }, async (req) => {

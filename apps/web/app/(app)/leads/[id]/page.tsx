@@ -201,6 +201,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                           <option value="">Selecione…</option>
                           {ads?.map((a) => (
                             <option key={a.metaId} value={a.metaId}>
+                              {a.code ? `[${a.code}] ` : ''}
                               {a.name} — {a.campaignName}
                             </option>
                           ))}
@@ -319,6 +320,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                               <option value="">Não informar</option>
                               {ads?.map((a) => (
                                 <option key={a.metaId} value={a.metaId}>
+                                  {a.code ? `[${a.code}] ` : ''}
                                   {a.name}
                                 </option>
                               ))}

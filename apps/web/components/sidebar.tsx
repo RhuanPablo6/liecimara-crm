@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, KanbanSquare, LayoutDashboard, LogOut, Menu, Settings, Users } from 'lucide-react';
+import { BarChart3, KanbanSquare, LayoutDashboard, LogOut, Megaphone, Menu, Settings, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -11,6 +11,7 @@ const NAV = [
   { href: '/leads', label: 'Leads', icon: Users },
   { href: '/funil', label: 'Funil', icon: KanbanSquare },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
+  { href: '/anuncios', label: 'Anúncios', icon: Megaphone },
   { href: '/configuracoes', label: 'Integrações', icon: Settings },
 ];
 

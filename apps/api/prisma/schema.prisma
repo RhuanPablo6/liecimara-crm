@@ -155,6 +155,9 @@ model Ad {
   campaignMetaId String
   name           String
   status         String?
+  // Código curto (ex.: "U1") usado na mensagem pronta do anúncio para a recepção
+  // identificar a origem quando não há referência oficial do WhatsApp.
+  code           String?  @unique
   updatedAt      DateTime @updatedAt
 
   @@index([campaignMetaId])

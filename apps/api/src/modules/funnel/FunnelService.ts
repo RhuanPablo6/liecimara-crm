@@ -34,7 +34,13 @@ export class FunnelService {
   // ── Leads ─────────────────────────────────────────────────
 
   async createLeadManually(
-    input: { waId: string; name?: string; procedureInterestId?: string | null },
+    input: {
+      waId: string;
+      name?: string;
+      procedureInterestId?: string | null;
+      /** Origem informada no cadastro (ex.: código do anúncio na mensagem pronta). */
+      attribution?: { adMetaId: string; note: string } | null;
+    },
     actor: Actor,
   ): Promise<Lead> {
     return this.repos.tx(async (r) => {
@@ -66,6 +72,8 @@ export class FunnelService {
       });
       await r.stageHistory.create({ leadId: lead.id, fromStage: null, toStage: 'NEW', userId: actor.id, reason: 'criado manualmente', at: now });
       await r.audit.log({ userId: actor.id, action: 'lead.create', entityType: 'Lead', entityId: lead.id, after: lead, ip: actor.ip });
+      // Na mesma transação: se a origem não puder ser registrada, o lead também não é criado.
+      if (input.attribution) return this.applyManualAttribution(r, lead, input.attribution.adMetaId, input.attribution.note, actor);
       return lead;
     });
   }

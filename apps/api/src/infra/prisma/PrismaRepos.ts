@@ -1,5 +1,6 @@
 // Implementação das portas de persistência com Prisma/PostgreSQL.
 import { Prisma, type PrismaClient } from '../../generated/prisma/client.js';
+import { DomainError, NotFoundError } from '../../domain/errors.js';
 import type {
   Ad,
   AdInsightDaily,
@@ -177,6 +178,18 @@ export class PrismaRepos implements Repos {
 
   ads = {
     findAd: async (metaId: string) => as<any>(await this.db.ad.findUnique({ where: { metaId } })),
+    findAdByCode: async (code: string) => as<any>(await this.db.ad.findUnique({ where: { code } })),
+    setAdCode: async (metaId: string, code: string | null) => {
+      try {
+        return as<any>(await this.db.ad.update({ where: { metaId }, data: { code } }));
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new DomainError('AD_CODE_TAKEN', `O código ${code} já está em uso por outro anúncio`, 409);
+        }
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') throw new NotFoundError('Anúncio', metaId);
+        throw err;
+      }
+    },
     upsertCampaign: async (c: any) => void (await this.db.campaign.upsert({ where: { metaId: c.metaId }, create: c, update: c })),
     upsertAdSet: async (a: any) => void (await this.db.adSet.upsert({ where: { metaId: a.metaId }, create: a, update: a })),
     upsertAd: async (a: any) => void (await this.db.ad.upsert({ where: { metaId: a.metaId }, create: a, update: a })),
