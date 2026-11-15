@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, BellRing, CalendarClock, KanbanSquare, HeartHandshake, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, Target, Users, Wallet } from 'lucide-react';
+import { BarChart3, BellRing, CalendarClock, CalendarDays, KanbanSquare, HeartHandshake, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, Target, Users, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 
 const NAV = [
   { href: '/', label: 'Painel', icon: LayoutDashboard },
+  { href: '/agenda', label: 'Agenda', icon: CalendarDays },
   { href: '/leads', label: 'Leads', icon: Users },
   { href: '/pacientes', label: 'Pacientes', icon: HeartHandshake },
   { href: '/retornos', label: 'Retornos', icon: BellRing },

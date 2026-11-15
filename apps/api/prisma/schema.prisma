@@ -323,6 +323,9 @@ model Appointment {
   leadId        String
   procedureId   String?
   scheduledFor  DateTime
+  /// Duração prevista (minutos) para a agenda
+  durationMin   Int               @default(60)
+  notes         String?
   status        AppointmentStatus @default(SCHEDULED)
   cancelReason  String?
   createdById   String?

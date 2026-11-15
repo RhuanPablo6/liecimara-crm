@@ -171,7 +171,7 @@ export class FunnelService {
 
   async scheduleAppointment(
     leadId: string,
-    input: { scheduledFor: Date; procedureId?: string | null },
+    input: { scheduledFor: Date; procedureId?: string | null; durationMin?: number | null; notes?: string | null },
     actor: Actor,
   ): Promise<Appointment> {
     return this.repos.tx(async (r) => {
@@ -182,6 +182,8 @@ export class FunnelService {
         leadId,
         procedureId: input.procedureId ?? lead.procedureInterestId,
         scheduledFor: input.scheduledFor,
+        durationMin: input.durationMin ?? 60,
+        notes: input.notes?.trim() || null,
         status: 'SCHEDULED',
         cancelReason: null,
         createdById: actor.id,
@@ -194,6 +196,40 @@ export class FunnelService {
         await r.leads.update(leadId, { lastActivityAt: now });
       }
       return appt;
+    });
+  }
+
+  /** Remarcar / ajustar: data e hora, duração, procedimento, observações. Mudou o horário → volta a "a confirmar". */
+  async updateAppointment(
+    appointmentId: string,
+    input: { scheduledFor?: Date; durationMin?: number; procedureId?: string | null; notes?: string | null },
+    actor: Actor,
+  ): Promise<Appointment> {
+    return this.repos.tx(async (r) => {
+      const appt = await r.appointments.findById(appointmentId);
+      if (!appt) throw new NotFoundError('Agendamento', appointmentId);
+      if (appt.status === 'CANCELED') throw new DomainError('CANCELED', 'Agendamento cancelado: crie um novo horário');
+      if (input.procedureId && !(await r.procedures.findById(input.procedureId))) throw new NotFoundError('Procedimento', input.procedureId);
+      const moved = input.scheduledFor && input.scheduledFor.getTime() !== appt.scheduledFor.getTime();
+      const patch: Partial<Appointment> = {
+        ...(input.scheduledFor ? { scheduledFor: input.scheduledFor } : {}),
+        ...(input.durationMin ? { durationMin: input.durationMin } : {}),
+        ...(input.procedureId !== undefined ? { procedureId: input.procedureId } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
+        ...(moved && appt.status === 'CONFIRMED' ? { status: 'SCHEDULED' as const } : {}),
+      };
+      const updated = await r.appointments.update(appointmentId, patch);
+      await r.audit.log({
+        userId: actor.id,
+        action: moved ? 'appointment.reschedule' : 'appointment.update',
+        entityType: 'Appointment',
+        entityId: appointmentId,
+        before: { scheduledFor: appt.scheduledFor, durationMin: appt.durationMin, procedureId: appt.procedureId, status: appt.status },
+        after: patch,
+        ip: actor.ip,
+      });
+      await r.leads.update(appt.leadId, { lastActivityAt: this.clock.now() });
+      return updated;
     });
   }
 

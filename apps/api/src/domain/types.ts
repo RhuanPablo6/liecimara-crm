@@ -208,6 +208,9 @@ export interface Appointment {
   leadId: string;
   procedureId: string | null;
   scheduledFor: Date;
+  /** Duração prevista em minutos (padrão 60). */
+  durationMin?: number;
+  notes?: string | null;
   status: AppointmentStatus;
   cancelReason: string | null;
   createdById: string | null;

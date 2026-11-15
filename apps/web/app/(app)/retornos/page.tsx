@@ -52,7 +52,7 @@ function RowActions({ r, onDone }: { r: any; onDone: () => void }) {
       />
       {r.leadId && (
         <Button asChild size="sm" variant="outline">
-          <Link href={`/leads/${r.leadId}`}>
+          <Link href={`/agenda?lead=${r.leadId}&name=${encodeURIComponent(r.name ?? '')}`}>
             <CalendarPlus /> Agendar
           </Link>
         </Button>
