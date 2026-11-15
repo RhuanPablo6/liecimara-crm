@@ -3,6 +3,7 @@
 import { ArrowLeft, CalendarCheck, CalendarX, CircleDollarSign, MessageCircle, ShoppingBag, Sparkles, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { use } from 'react';
+import { MessageButton } from '@/components/message-button';
 import { PatientTagControl } from '@/components/patient-tag';
 import { StageBadge } from '@/components/badges';
 import { Badge } from '@/components/ui/badge';
@@ -66,6 +67,7 @@ export default function PatientPage({ params }: { params: Promise<{ id: string }
             )}
             <span>Primeiro contato em {date(contact.firstSeenAt)}</span>
             {s && <PatientTagControl contactId={contact.id} tag={s.tag} manual={s.tagManual} onChanged={reload} />}
+            <MessageButton waId={contact.waId} vars={{ nome: contact.name, procedimento: s?.procedures[0]?.name }} label="Mensagem pronta" />
           </div>
           {s && (
             <p className="mt-2 text-sm">

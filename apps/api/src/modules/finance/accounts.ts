@@ -138,6 +138,9 @@ export interface AccountItem {
   installments?: number;
   method?: string | null;
   leadId?: string;
+  /** Para a mensagem de cobrança (saldo do paciente). */
+  waId?: string | null;
+  procedureName?: string | null;
 }
 
 const statusOf = (done: boolean, dueDay: string, today: string): AccountStatus => (done ? 'PAID' : dueDay < today ? 'OVERDUE' : 'PENDING');
@@ -172,7 +175,7 @@ export class AccountsService {
     ]);
     const procName = new Map(procedures.map((p) => [p.id, p.name]));
     const saleById = new Map(sales.map((s) => [s.id, s]));
-    const patient = await this.patientNames(sales);
+    const { names: patient, phones } = await this.patientNames(sales);
 
     const payables: AccountItem[] = [];
     for (const e of expenses as Expense[]) {
@@ -249,6 +252,8 @@ export class AccountsService {
         amountCents: open,
         status: statusOf(false, dueDay, today),
         leadId: sale.leadId,
+        waId: phones.get(sale.leadId) ?? null,
+        procedureName: procName.get(sale.procedureId) ?? null,
       });
     }
 
@@ -311,13 +316,15 @@ export class AccountsService {
   }
 
   private async patientNames(sales: Sale[]) {
-    const out = new Map<string, string>();
+    const names = new Map<string, string>();
+    const phones = new Map<string, string>();
     for (const leadId of new Set(sales.map((s) => s.leadId))) {
       const lead = await this.repos.leads.findById(leadId);
       const contact = lead ? await this.repos.contacts.findById(lead.contactId) : null;
       const name = contact?.name ?? contact?.profileName ?? (contact?.waId ? `+${contact.waId}` : null);
-      if (name) out.set(leadId, name);
+      if (name) names.set(leadId, name);
+      if (contact?.waId) phones.set(leadId, contact.waId);
     }
-    return out;
+    return { names, phones };
   }
 }

@@ -188,6 +188,19 @@ export interface Procedure {
   name: string;
   defaultPriceCents: number | null;
   active: boolean;
+  /** Dias até o retorno (lembrete). */
+  returnDays?: number | null;
+}
+
+export interface RecallAction {
+  id: string;
+  contactId: string;
+  dueKey: string;
+  kind: 'CONTACTED' | 'SNOOZED' | 'DISMISSED';
+  until: Date | null;
+  note: string | null;
+  createdById: string | null;
+  createdAt: Date;
 }
 
 export interface Appointment {

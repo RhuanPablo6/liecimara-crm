@@ -249,6 +249,7 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
         name: z.string().trim().min(2).max(120).optional(),
         defaultPriceCents: z.number().int().positive().nullable().optional(),
         active: z.boolean().optional(),
+        returnDays: z.number().int().min(1).max(1095).nullable().optional(),
       })
       .parse(req.body);
     const before = await c.repos.procedures.findById(id);

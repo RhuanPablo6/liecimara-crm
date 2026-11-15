@@ -13,6 +13,7 @@ const SUGGESTIONS = ['Preenchimento', 'Botox', 'Bioestimulador', 'Lavieen', 'Ult
 function Row({ p, onSaved }: { p: any; onSaved: () => Promise<void> }) {
   const [name, setName] = useState(p.name);
   const [price, setPrice] = useState(p.defaultPriceCents ? (p.defaultPriceCents / 100).toFixed(2).replace('.', ',') : '');
+  const [ret, setRet] = useState(p.returnDays ? String(p.returnDays) : '');
   const { busy, error, run } = useAction();
   const save = (body: Record<string, unknown>) =>
     run(async () => {
@@ -21,7 +22,7 @@ function Row({ p, onSaved }: { p: any; onSaved: () => Promise<void> }) {
     });
   return (
     <div className="space-y-1">
-      <div className="grid grid-cols-[1fr_7rem_auto] items-center gap-2">
+      <div className="grid grid-cols-[1fr_7rem_6rem_auto] items-center gap-2">
         <Input
           aria-label="Nome do procedimento"
           value={name}
@@ -40,6 +41,19 @@ function Row({ p, onSaved }: { p: any; onSaved: () => Promise<void> }) {
           onBlur={() => {
             const cents = price.trim() ? parseBRL(price) : null;
             if (cents !== (p.defaultPriceCents ?? null)) save({ defaultPriceCents: cents });
+          }}
+        />
+        <Input
+          aria-label="Retorno em dias"
+          inputMode="numeric"
+          placeholder="Retorno"
+          title="Em quantos dias a paciente deve voltar (lista de Retornos)"
+          value={ret}
+          disabled={busy}
+          onChange={(e) => setRet(e.target.value.replace(/\D/g, ''))}
+          onBlur={() => {
+            const days = ret ? Number.parseInt(ret, 10) : null;
+            if (days !== (p.returnDays ?? null)) save({ returnDays: days });
           }}
         />
         <Button size="sm" variant="ghost" disabled={busy} onClick={() => save({ active: !p.active })}>
@@ -84,11 +98,11 @@ export function ProceduresDialog({ onChanged }: { onChanged?: () => void }) {
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
           Os procedimentos ligam compras de material, anúncios e vendas. O preço é só uma sugestão: na venda você digita o valor real (promoções,
-          pacotes…).
+          pacotes…). <b>Retorno</b> = em quantos dias a paciente deve voltar (ex.: Botox 120): alimenta a lista de Retornos.
         </p>
         <div className="space-y-2">
           {(procedures ?? []).map((p) => (
-            <Row key={`${p.id}:${p.name}:${p.defaultPriceCents}:${p.active}`} p={p} onSaved={refresh} />
+            <Row key={`${p.id}:${p.name}:${p.defaultPriceCents}:${p.active}:${p.returnDays}`} p={p} onSaved={refresh} />
           ))}
           {procedures && procedures.length === 0 && <p className="text-sm text-muted-foreground">Nenhum procedimento cadastrado ainda.</p>}
         </div>

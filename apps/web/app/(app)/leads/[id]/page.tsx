@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ErrorText, Field, Input, NativeSelect, Textarea } from '@/components/ui/form';
 import { api, useAction, useApi } from '@/lib/api';
+import { MessageButton } from '@/components/message-button';
 import { ORGANIC_ORIGINS, ORIGIN_LABEL, ORIGIN_NOTE_HINT } from '@/lib/origins';
 import { PatientTagControl } from '@/components/patient-tag';
 import { brl, date, dateTime, parseBRL, phone } from '@/lib/format';
@@ -152,6 +153,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             {contact?.id && (
               <PatientTagControl contactId={contact.id} tag={lead.patientTag} manual={lead.patientTagManual} onChanged={reload} />
             )}
+            <MessageButton waId={contact?.waId} vars={{ nome: contact?.name ?? contact?.profileName, procedimento: lead.procedureInterest }} label="Mensagem pronta" />
             {contact?.id && (
               <Link className="text-navy-600 hover:underline" href={`/pacientes/${contact.id}`}>
                 Ver histórico do paciente

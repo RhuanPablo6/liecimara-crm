@@ -229,6 +229,8 @@ model Procedure {
   name              String  @unique
   defaultPriceCents Int?
   active            Boolean @default(true)
+  /// Dias até a paciente precisar voltar (ex.: Botox 120). Nulo = sem lembrete de retorno.
+  returnDays        Int?
 
   @@map("procedures")
 }
@@ -589,4 +591,21 @@ model AdAccount {
   updatedAt    DateTime @updatedAt
 
   @@map("ad_accounts")
+}
+
+// ── Retornos: registro de contato / adiamento com a paciente ─
+
+model RecallAction {
+  id          String    @id @default(cuid())
+  contactId   String
+  /// Ciclo a que a ação se refere (ex.: "<procedimento>:<data da última vez>" ou "reactivation:<data>")
+  dueKey      String
+  kind        String // CONTACTED | SNOOZED | DISMISSED
+  until       DateTime?
+  note        String?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  @@index([contactId])
+  @@map("recall_actions")
 }

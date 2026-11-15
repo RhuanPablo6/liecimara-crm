@@ -26,6 +26,7 @@ import type {
   Payment,
   Procedure,
   ProcedurePerformed,
+  RecallAction,
   Reminder,
   Sale,
   SupplyPurchase,
@@ -226,6 +227,11 @@ export interface SettingRepo {
   set<T>(key: string, value: T): Promise<void>;
 }
 
+export interface RecallActionRepo {
+  create(data: Omit<RecallAction, 'id' | 'createdAt'>): Promise<RecallAction>;
+  list(): Promise<RecallAction[]>;
+}
+
 export interface AuditRepo {
   log(entry: AuditEntry): Promise<void>;
   list(filter: { entityType?: string; entityId?: string; limit?: number }): Promise<
@@ -254,6 +260,7 @@ export interface Repos {
   events: InboundEventRepo;
   audit: AuditRepo;
   settings: SettingRepo;
+  recalls: RecallActionRepo;
   /** Executa `fn` em transação. */
   tx<T>(fn: (r: Repos) => Promise<T>): Promise<T>;
 }

@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { CashBalanceDialog, FeesDialog } from '@/components/finance-settings';
 import { ReceiveDialog } from '@/components/finance-sales';
+import { MessageButton } from '@/components/message-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -209,6 +210,16 @@ function ReceivablesTable({ items, showPaid, onChanged }: { items: any[]; showPa
                 <StatusBadge status={i.status} receivable />
               </TD>
               <TD className="whitespace-nowrap text-right">
+                {i.type === 'SALE_BALANCE' && i.status !== 'PAID' && i.waId && (
+                  <span className="mr-1 inline-block">
+                    <MessageButton
+                      waId={i.waId}
+                      use="CHARGE"
+                      label="Cobrar"
+                      vars={{ nome: i.description, procedimento: i.procedureName, valor: brl(i.amountCents) }}
+                    />
+                  </span>
+                )}
                 {i.type === 'SALE_BALANCE' && i.status !== 'PAID' && (
                   <Button
                     size="sm"

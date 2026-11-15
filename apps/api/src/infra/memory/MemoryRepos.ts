@@ -24,6 +24,7 @@ import type {
   Payment,
   Procedure,
   ProcedurePerformed,
+  RecallAction,
   Reminder,
   Sale,
   SupplyPurchase,
@@ -53,6 +54,7 @@ interface State {
   purchases: Map<string, SupplyPurchase>;
   expenses: Map<string, Expense>;
   settings: Map<string, unknown>;
+  recalls: Map<string, RecallAction>;
   performed: Map<string, ProcedurePerformed>;
   reminders: Map<string, Reminder>;
   connections: Map<string, IntegrationConnection>;
@@ -81,6 +83,7 @@ const emptyState = (): State => ({
   purchases: new Map(),
   expenses: new Map(),
   settings: new Map(),
+  recalls: new Map(),
   performed: new Map(),
   reminders: new Map(),
   connections: new Map(),
@@ -383,6 +386,11 @@ export class MemoryRepos implements Repos {
           .filter((e) => !r || inRange(e.date, r))
           .sort((a, b) => a.date.getTime() - b.date.getTime() || a.createdAt.getTime() - b.createdAt.getTime()),
       ),
+  };
+
+  recalls = {
+    create: async (d: Omit<RecallAction, 'id' | 'createdAt'>) => insert(this.s.recalls, { ...d, createdAt: new Date() }, 'rca_'),
+    list: async () => clone([...this.s.recalls.values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())),
   };
 
   settings = {

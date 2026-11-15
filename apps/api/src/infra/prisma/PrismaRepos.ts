@@ -405,6 +405,11 @@ export class PrismaRepos implements Repos {
       ),
   };
 
+  recalls = {
+    create: async (d: any) => as<any>(await this.db.recallAction.create({ data: d })),
+    list: async () => as<any>(await this.db.recallAction.findMany({ orderBy: { createdAt: 'asc' } })),
+  };
+
   settings = {
     get: async <T>(key: string) => ((await this.db.setting.findUnique({ where: { key } }))?.value as T | undefined) ?? null,
     set: async <T>(key: string, value: T) =>
