@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastify",
   "buildCommand": "node scripts/vercel-build.mjs",
   "crons": [{ "path": "/cron/tick", "schedule": "0 9 * * *" }]
 }
