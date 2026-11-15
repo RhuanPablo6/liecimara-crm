@@ -1,0 +1,61 @@
+# Render Blueprint: banco + API (com worker embutido) + painel.
+# Na Render: New → Blueprint → escolha este repositório.
+# Custo aproximado: API US$ 7 + painel US$ 7 + Postgres US$ 6 por mês.
+databases:
+  - name: liecimara-db
+    databaseName: liecimara_crm
+    user: crm
+    plan: 0.1c-256mb
+    region: virginia
+    postgresMajorVersion: "16"
+
+services:
+  - type: web
+    name: liecimara-api
+    runtime: docker
+    region: virginia
+    plan: 0.5c-512mb
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    # Aplica migrações e garante o administrador inicial antes de cada versão entrar no ar.
+    preDeployCommand: npx prisma migrate deploy && npx tsx prisma/seed.ts
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: { name: liecimara-db, property: connectionString }
+      - key: APP_ENV
+        value: homolog
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: RUN_WORKER_IN_API
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CREDENTIALS_ENCRYPTION_KEY
+        generateValue: true # 256 bits em base64, o formato exigido
+      - key: WHATSAPP_WEBHOOK_VERIFY_TOKEN
+        generateValue: true # copie este valor no painel de webhooks da Meta
+      - key: META_GRAPH_VERSION
+        value: v23.0
+      - key: LEAD_REOPEN_AFTER_DAYS
+        value: "30"
+      - key: SEED_ADMIN_EMAIL
+        sync: false # pedido na criação: e-mail do administrador
+      - key: SEED_ADMIN_PASSWORD
+        sync: false # pedido na criação: senha do administrador (mín. 10 caracteres)
+      # META_APP_SECRET é adicionado depois, ao configurar o WhatsApp
+      # (sem ele, os webhooks são recusados).
+
+  - type: web
+    name: liecimara-painel
+    runtime: docker
+    region: virginia
+    plan: 0.5c-512mb
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    healthCheckPath: /login
+    envVars:
+      - key: API_INTERNAL_URL
+        fromService: { name: liecimara-api, type: web, property: hostport }

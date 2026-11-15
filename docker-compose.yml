@@ -1,0 +1,60 @@
+# Stack completa: PostgreSQL, API, worker e frontend.
+# Homologação local:  docker compose --env-file .env up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-crm}
+      POSTGRES_DB: liecimara_crm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U crm -d liecimara_crm']
+      interval: 5s
+      retries: 10
+
+  migrate:
+    build: { context: ., dockerfile: apps/api/Dockerfile, target: build }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://crm:${POSTGRES_PASSWORD:-crm}@db:5432/liecimara_crm?schema=public
+    working_dir: /app/apps/api
+    command: sh -c "npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    depends_on:
+      db: { condition: service_healthy }
+
+  api:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://crm:${POSTGRES_PASSWORD:-crm}@db:5432/liecimara_crm?schema=public
+    ports: ['4000:4000']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  worker:
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://crm:${POSTGRES_PASSWORD:-crm}@db:5432/liecimara_crm?schema=public
+    command: ['node', 'dist/worker.js']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args: { NEXT_PUBLIC_API_URL: '${NEXT_PUBLIC_API_URL:-http://localhost:4000}' }
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    ports: ['3000:3000']
+    depends_on: [api]
+
+volumes:
+  pgdata:
