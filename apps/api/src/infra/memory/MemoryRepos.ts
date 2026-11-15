@@ -24,6 +24,7 @@ import type {
   ProcedurePerformed,
   Reminder,
   Sale,
+  SupplyPurchase,
   User,
 } from '../../domain/types.js';
 import { OPEN_STAGES } from '../../domain/types.js';
@@ -46,6 +47,7 @@ interface State {
   appointments: Map<string, Appointment>;
   sales: Map<string, Sale>;
   payments: Map<string, Payment>;
+  purchases: Map<string, SupplyPurchase>;
   performed: Map<string, ProcedurePerformed>;
   reminders: Map<string, Reminder>;
   connections: Map<string, IntegrationConnection>;
@@ -70,6 +72,7 @@ const emptyState = (): State => ({
   appointments: new Map(),
   sales: new Map(),
   payments: new Map(),
+  purchases: new Map(),
   performed: new Map(),
   reminders: new Map(),
   connections: new Map(),
@@ -307,6 +310,27 @@ export class MemoryRepos implements Repos {
     create: async (d: Omit<Payment, 'id'>) => insert(this.s.payments, d, 'pay_'),
     listBySale: async (saleId: string) => clone([...this.s.payments.values()].filter((p) => p.saleId === saleId)),
     listPaidIn: async (r: DateRange) => clone([...this.s.payments.values()].filter((p) => inRange(p.paidAt, r))),
+  };
+
+  purchases = {
+    create: async (d: Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const now = new Date();
+      return insert(this.s.purchases, { ...d, createdAt: now, updatedAt: now }, 'sup_');
+    },
+    update: async (id: string, d: Partial<SupplyPurchase>) => {
+      if (!this.s.purchases.has(id)) throw new NotFoundError('Registro de compra', id);
+      return patch(this.s.purchases, id, { ...d, updatedAt: new Date() });
+    },
+    delete: async (id: string) => {
+      if (!this.s.purchases.delete(id)) throw new NotFoundError('Registro de compra', id);
+    },
+    findById: async (id: string) => clone(this.s.purchases.get(id) ?? null),
+    list: async (r?: DateRange) =>
+      clone(
+        [...this.s.purchases.values()]
+          .filter((p) => !r || inRange(p.purchasedAt, r))
+          .sort((a, b) => b.purchasedAt.getTime() - a.purchasedAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime()),
+      ),
   };
 
   performed = {

@@ -200,6 +200,29 @@ export interface Payment {
   createdById: string | null;
 }
 
+export const SUPPLY_PAYMENT_METHODS = ['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'BOLETO', 'CASH', 'BANK_TRANSFER', 'OTHER'] as const;
+export type SupplyPaymentMethod = (typeof SUPPLY_PAYMENT_METHODS)[number];
+
+export interface SupplyItem {
+  name: string;
+  quantity: string | null;
+}
+
+/** Compra de insumos/materiais da clínica. */
+export interface SupplyPurchase {
+  id: string;
+  purchasedAt: Date;
+  supplier: string | null;
+  items: SupplyItem[];
+  totalCents: number;
+  paymentMethod: SupplyPaymentMethod;
+  installments: number;
+  notes: string | null;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ProcedurePerformed {
   id: string;
   leadId: string;

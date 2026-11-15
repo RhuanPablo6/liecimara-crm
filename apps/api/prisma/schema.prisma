@@ -500,3 +500,25 @@ model Job {
   @@index([status, runAt])
   @@map("jobs")
 }
+
+// ── Compras de insumos da clínica ───────────────────────────
+
+model SupplyPurchase {
+  id            String   @id @default(cuid())
+  purchasedAt   DateTime
+  supplier      String?
+  /// [{ name, quantity }]
+  items         Json
+  totalCents    Int
+  /// PIX | CREDIT_CARD | DEBIT_CARD | BOLETO | CASH | BANK_TRANSFER | OTHER
+  paymentMethod String
+  /// 1 = à vista
+  installments  Int      @default(1)
+  notes         String?
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([purchasedAt])
+  @@map("supply_purchases")
+}

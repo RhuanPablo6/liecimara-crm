@@ -26,6 +26,7 @@ import type {
   ProcedurePerformed,
   Reminder,
   Sale,
+  SupplyPurchase,
   User,
 } from '../domain/types.js';
 
@@ -152,6 +153,15 @@ export interface PaymentRepo {
   listPaidIn(range: DateRange): Promise<Payment[]>;
 }
 
+export interface SupplyPurchaseRepo {
+  create(data: Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt'>): Promise<SupplyPurchase>;
+  update(id: string, data: Partial<Omit<SupplyPurchase, 'id' | 'createdAt' | 'updatedAt'>>): Promise<SupplyPurchase>;
+  delete(id: string): Promise<void>;
+  findById(id: string): Promise<SupplyPurchase | null>;
+  /** Mais recentes primeiro. Sem período = todas. */
+  list(range?: DateRange): Promise<SupplyPurchase[]>;
+}
+
 export interface ProcedurePerformedRepo {
   create(data: Create<ProcedurePerformed>): Promise<ProcedurePerformed>;
   listByLead(leadId: string): Promise<ProcedurePerformed[]>;
@@ -210,6 +220,7 @@ export interface Repos {
   appointments: AppointmentRepo;
   sales: SaleRepo;
   payments: PaymentRepo;
+  purchases: SupplyPurchaseRepo;
   performed: ProcedurePerformedRepo;
   reminders: ReminderRepo;
   connections: ConnectionRepo;

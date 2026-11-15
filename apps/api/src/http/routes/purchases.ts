@@ -1,0 +1,94 @@
+// Compras de insumos da clínica: histórico com valor, materiais, data e forma de pagamento.
+import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
+import type { Container } from '../../container.js';
+import { DomainError } from '../../domain/errors.js';
+import { SUPPLY_PAYMENT_METHODS, type SupplyPurchase } from '../../domain/types.js';
+import type { Guard } from '../server.js';
+
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data no formato AAAA-MM-DD');
+
+/** Dia civil de São Paulo → meio-dia local (15:00 UTC), para nunca "pular" de dia em outro fuso. */
+export function dayToDate(d: string): Date {
+  const date = new Date(`${d}T15:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) throw new DomainError('VALIDATION', 'Data inválida');
+  return date;
+}
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .nullish()
+    .transform((v) => (v && v.trim() ? v.trim() : null));
+
+const itemSchema = z.object({
+  name: z.string().trim().min(1, 'Informe o material').max(200),
+  quantity: optionalText(50),
+});
+
+const purchaseSchema = z.object({
+  purchasedAt: day,
+  supplier: optionalText(200),
+  items: z.array(itemSchema).min(1, 'Informe ao menos um material').max(100),
+  totalCents: z.number().int().positive('Informe o valor').max(10_000_000_00),
+  paymentMethod: z.enum(SUPPLY_PAYMENT_METHODS),
+  installments: z.number().int().min(1).max(48).default(1),
+  notes: optionalText(2000),
+});
+
+function toData(b: z.infer<typeof purchaseSchema>) {
+  return { ...b, purchasedAt: dayToDate(b.purchasedAt) };
+}
+
+export function summarize(list: SupplyPurchase[]) {
+  const byMethod: Record<string, number> = {};
+  let totalCents = 0;
+  let installmentCents = 0;
+  for (const p of list) {
+    totalCents += p.totalCents;
+    if (p.installments > 1) installmentCents += p.totalCents;
+    byMethod[p.paymentMethod] = (byMethod[p.paymentMethod] ?? 0) + p.totalCents;
+  }
+  return { count: list.length, totalCents, installmentCents, cashCents: totalCents - installmentCents, byMethod };
+}
+
+export function registerPurchaseRoutes(app: FastifyInstance, c: Container, guard: Guard) {
+  /** Lista as compras. ?from=AAAA-MM-DD&to=AAAA-MM-DD (to inclusivo). Sem período = todas. */
+  app.get('/purchases', { preHandler: guard('purchases:read') }, async (req) => {
+    const q = z.object({ from: day.optional(), to: day.optional() }).parse(req.query);
+    const range =
+      q.from || q.to
+        ? {
+            from: q.from ? new Date(`${q.from}T03:00:00.000Z`) : new Date(0),
+            to: q.to ? new Date(new Date(`${q.to}T03:00:00.000Z`).getTime() + 86_400_000) : new Date(8.64e15),
+          }
+        : undefined;
+    const items = await c.repos.purchases.list(range);
+    return { items, summary: summarize(items) };
+  });
+
+  app.post('/purchases', { preHandler: guard('purchases:write') }, async (req) => {
+    const b = purchaseSchema.parse(req.body);
+    const p = await c.repos.purchases.create({ ...toData(b), createdById: req.user!.sub });
+    await c.audit.record({ userId: req.user!.sub, action: 'purchase.create', entityType: 'SupplyPurchase', entityId: p.id, after: p, ip: req.ip });
+    return p;
+  });
+
+  app.patch('/purchases/:id', { preHandler: guard('purchases:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const b = purchaseSchema.parse(req.body);
+    const before = await c.repos.purchases.findById(id);
+    const p = await c.repos.purchases.update(id, toData(b));
+    await c.audit.record({ userId: req.user!.sub, action: 'purchase.update', entityType: 'SupplyPurchase', entityId: id, before, after: p, ip: req.ip });
+    return p;
+  });
+
+  app.delete('/purchases/:id', { preHandler: guard('purchases:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const before = await c.repos.purchases.findById(id);
+    await c.repos.purchases.delete(id);
+    await c.audit.record({ userId: req.user!.sub, action: 'purchase.delete', entityType: 'SupplyPurchase', entityId: id, before, ip: req.ip });
+    return { ok: true };
+  });
+}

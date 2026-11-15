@@ -293,6 +293,34 @@ export class PrismaRepos implements Repos {
     listPaidIn: async (r: DateRange) => as<any>(await this.db.payment.findMany({ where: { paidAt: inRange(r) } })),
   };
 
+  purchases = {
+    create: async (d: any) => as<any>(await this.db.supplyPurchase.create({ data: d })),
+    update: async (id: string, d: any) => {
+      try {
+        return as<any>(await this.db.supplyPurchase.update({ where: { id }, data: d }));
+      } catch (e: any) {
+        if (e?.code === 'P2025') throw new NotFoundError('Registro de compra', id);
+        throw e;
+      }
+    },
+    delete: async (id: string) => {
+      try {
+        await this.db.supplyPurchase.delete({ where: { id } });
+      } catch (e: any) {
+        if (e?.code === 'P2025') throw new NotFoundError('Registro de compra', id);
+        throw e;
+      }
+    },
+    findById: async (id: string) => as<any>(await this.db.supplyPurchase.findUnique({ where: { id } })),
+    list: async (r?: DateRange) =>
+      as<any>(
+        await this.db.supplyPurchase.findMany({
+          where: r ? { purchasedAt: inRange(r) } : undefined,
+          orderBy: [{ purchasedAt: 'desc' }, { createdAt: 'desc' }],
+        }),
+      ),
+  };
+
   performed = {
     create: async (d: any) => as<any>(await this.db.procedurePerformed.create({ data: d })),
     listByLead: async (leadId: string) => as<any>(await this.db.procedurePerformed.findMany({ where: { leadId } })),
