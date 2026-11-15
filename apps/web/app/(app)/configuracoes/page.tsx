@@ -39,6 +39,7 @@ function WhatsAppPanel() {
   const { data: events, reload: reloadEvents } = useApi<any[]>('/integrations/events?limit=30');
   const act = useAction();
   const [form, setForm] = useState({ wabaId: '', phoneNumberId: '', accessToken: '', coexistence: true });
+  const [d360Key, setD360Key] = useState('');
 
   if (!data) return <p className="text-muted-foreground">Carregando…</p>;
   const run = (fn: () => Promise<unknown>) => act.run(async () => (await fn(), await reload(), await reloadEvents()));
@@ -51,10 +52,38 @@ function WhatsAppPanel() {
         recebe eventos e consulta dados. A vinculação do número de produção exige confirmação do administrador.
       </div>
 
+      {!data.connections.some((c: any) => c.provider === 'WHATSAPP_COEXISTENCE_PARTNER') && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Conectar via 360dialog (coexistência)</CardTitle>
+            <CardDescription>
+              Depois de conectar o número no Hub da 360dialog, cole aqui a API key do número. O CRM registra o webhook na 360dialog
+              e passa a receber as mensagens. A clínica continua atendendo pelo app WhatsApp Business.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Field label="API key da 360dialog">
+              <Input type="password" autoComplete="off" value={d360Key} onChange={(e) => setD360Key(e.target.value)} />
+            </Field>
+            <Button
+              disabled={act.busy || d360Key.trim().length < 8}
+              onClick={() =>
+                run(async () => {
+                  await api('/integrations/whatsapp/360dialog', { method: 'POST', body: { apiKey: d360Key } });
+                  setD360Key('');
+                })
+              }
+            >
+              Conectar 360dialog
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {data.connections.length === 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Configurar WhatsApp Cloud API</CardTitle>
+            <CardTitle>Configurar WhatsApp Cloud API (avançado)</CardTitle>
             <CardDescription>Dados obtidos após o Embedded Signup (coexistência) no Gerenciador do WhatsApp.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">

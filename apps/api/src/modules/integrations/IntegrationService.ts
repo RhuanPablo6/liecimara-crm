@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { DomainError } from '../../domain/errors.js';
 import type { IntegrationConnection, IntegrationEnvironment, Role } from '../../domain/types.js';
 import { CredentialVault } from '../../infra/crypto/CredentialVault.js';
@@ -99,6 +100,62 @@ export class IntegrationService {
       entityType: 'IntegrationConnection',
       entityId: conn.id,
       after: { partner: input.config.partnerName, phoneNumberId: input.config.phoneNumberId, environment: this.env },
+    });
+    return conn;
+  }
+
+  /**
+   * Conexão de um clique com a 360dialog (parceiro oficial com coexistência):
+   * 1) gera um segredo; 2) registra o webhook do número na 360dialog apontando para
+   * /webhooks/whatsapp/partner com "Authorization: Bearer <segredo>"; 3) salva a conexão.
+   * O ID do número é aprendido do primeiro webhook recebido.
+   */
+  async configure360dialog(
+    input: { apiKey: string; confirmProductionNumber?: boolean },
+    actor: { id: string; role: Role },
+  ): Promise<IntegrationConnection> {
+    this.guardProduction(this.env, actor.role, input.confirmProductionNumber);
+    const apiKey = input.apiKey.trim();
+    const baseUrl = 'https://waba-v2.360dialog.io';
+    const webhookUrl = `${this.settings.publicUrl.replace(/\/$/, '')}/webhooks/whatsapp/partner`;
+    const authorization = `Bearer ${randomBytes(32).toString('hex')}`;
+
+    const res = await this.http.request(`${baseUrl}/v1/configs/webhook`, {
+      method: 'POST',
+      headers: { 'D360-API-KEY': apiKey },
+      body: { url: webhookUrl, headers: { Authorization: authorization } },
+    });
+    if (res.status === 401 || res.status === 403) {
+      throw new DomainError('PARTNER_AUTH', 'A 360dialog recusou a API key. Confira se copiou a chave do número certo no Hub.');
+    }
+    if (res.status >= 400) {
+      const detail = (res.json as any)?.meta?.developer_message ?? (res.json as any)?.error?.message ?? `HTTP ${res.status}`;
+      throw new DomainError('PARTNER_WEBHOOK', `Não foi possível registrar o webhook na 360dialog: ${detail}`);
+    }
+
+    const current = await this.repos.connections.find('WHATSAPP_COEXISTENCE_PARTNER', this.env);
+    const config: Omit<PartnerConfig, 'authHeaderValue'> = {
+      partnerName: '360dialog',
+      baseUrl,
+      authHeaderName: 'D360-API-KEY',
+      phoneNumberId: current?.phoneNumberId ?? '',
+      webhookAuth: { mode: 'static-header', header: 'authorization', value: '' },
+      // A API v2 da 360dialog não expõe /{phone_number_id}; a configuração do webhook serve para validar a chave.
+      paths: { phoneInfo: 'v1/configs/webhook' },
+    };
+    const conn = await this.repos.connections.upsert('WHATSAPP_COEXISTENCE_PARTNER', this.env, {
+      phoneNumberId: config.phoneNumberId || null,
+      coexistence: true,
+      partnerConfig: { ...config, webhookAuth: { mode: 'static-header', header: 'authorization' } },
+      encryptedCredentials: this.vault.encrypt({ apiKey, webhookSecret: authorization }),
+      status: 'PENDING',
+    });
+    await this.repos.audit.log({
+      userId: actor.id,
+      action: 'integration.partner.configure',
+      entityType: 'IntegrationConnection',
+      entityId: conn.id,
+      after: { partner: '360dialog', webhookUrl, environment: this.env },
     });
     return conn;
   }

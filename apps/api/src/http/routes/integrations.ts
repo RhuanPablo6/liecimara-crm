@@ -50,6 +50,13 @@ export function registerIntegrationRoutes(app: FastifyInstance, c: Container, gu
     return { id: conn.id, status: conn.status };
   });
 
+  // Conexão de um clique com a 360dialog: só a API key do número.
+  app.post('/integrations/whatsapp/360dialog', { preHandler: guard('integrations:write') }, async (req) => {
+    const b = z.object({ apiKey: z.string().trim().min(8), confirmProductionNumber: z.boolean().optional() }).parse(req.body);
+    const conn = await c.integrations.configure360dialog(b, actorOf(req));
+    return { id: conn.id, status: conn.status };
+  });
+
   app.post('/integrations/whatsapp/:kind/diagnose', { preHandler: guard('integrations:read') }, async (req) => {
     const { kind } = kindParam.parse(req.params);
     return c.integrations.runDiagnostics(kind, req.user!.sub);

@@ -22,9 +22,11 @@ export const BUSINESS_PHONE = '5511900000000';
 
 export class FakeHttp implements HttpClient {
   calls: string[] = [];
+  requests: { url: string; init?: { method: string; headers?: Record<string, string>; body?: unknown } }[] = [];
   handler: (url: string) => HttpResponse | Promise<HttpResponse> = () => ({ status: 200, json: { data: [] } });
-  async request(url: string): Promise<HttpResponse> {
+  async request(url: string, init?: { method: 'GET' | 'POST' | 'DELETE'; headers?: Record<string, string>; body?: unknown }): Promise<HttpResponse> {
     this.calls.push(url);
+    this.requests.push({ url, init });
     return this.handler(url);
   }
 }

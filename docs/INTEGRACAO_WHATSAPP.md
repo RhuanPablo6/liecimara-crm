@@ -50,6 +50,20 @@ A referência de anúncio vem em `messages[].referral`, com `source_type`, `sour
 6. Envie uma mensagem de teste e confira em **Eventos recentes**.
 7. Se aplicável, clique em **Sincronizar contatos** e **Importar histórico** (uma vez só).
 
+## 360dialog (conexão de um clique)
+
+A Meta exige que a coexistência seja feita por um app de **Solution Partner ou Tech Provider**. Para uma clínica, o caminho prático é um parceiro oficial. O CRM tem uma configuração pronta para a 360dialog:
+
+1. No Hub da 360dialog: **Add channel** → plano → número → **"Yes, Business App"** → Meta Signup → portfólio da clínica (não pode ser trocado depois) → escanear o QR code no WhatsApp Business do celular (com sincronização de histórico e contatos).
+2. Gere a **API key** do número no Hub.
+3. No CRM, em **Integrações → WhatsApp → Conectar via 360dialog**, cole a API key. O CRM:
+   - gera um segredo e registra na 360dialog (`POST https://waba-v2.360dialog.io/v1/configs/webhook`) a URL `https://<api>/webhooks/whatsapp/partner` com `Authorization: Bearer <segredo>`;
+   - passa a aceitar apenas webhooks com esse cabeçalho (`static-header`);
+   - aprende o ID do número pelo primeiro webhook.
+4. Faça isso em até **24 h** após o onboarding: o histórico e os contatos só são enviados depois que o webhook do número estiver configurado (se não começar, use **Sync now** nas configurações de API do número, no Hub).
+
+Observações: após o onboarding os aparelhos conectados (WhatsApp Web etc.) são desconectados e precisam ser reconectados; WhatsApp para Windows e WearOS não são suportados; o app precisa ser aberto ao menos a cada 13 dias e não pode ser desinstalado.
+
 ## Parceiro de coexistência (BSP)
 
 Use `POST /integrations/whatsapp/partner` com:
