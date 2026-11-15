@@ -135,6 +135,11 @@ function GoalsForm({ month, goals, procedures, onDone }: { month: string; goals:
           <p className="text-xs text-muted-foreground">
             Soma dos procedimentos: {brl(procSum)}
             {parseBRL(revenue) ? ` (${pctText(Math.round((procSum / parseBRL(revenue)!) * 1000) / 10)} da meta do mês)` : ''}
+            {procSum !== parseBRL(revenue) && (
+              <button type="button" className="ml-2 text-navy-600 underline" onClick={() => setRevenue(centsToInput(procSum))}>
+                usar como meta do mês
+              </button>
+            )}
           </p>
         )}
       </div>
