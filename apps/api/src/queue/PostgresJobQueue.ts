@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '../generated/prisma/client.js';
 import { newId } from '../shared/ids.js';
 import type { EnqueueOptions, JobQueue, JobRecord } from './JobQueue.js';
 

@@ -1,5 +1,5 @@
 // Implementação das portas de persistência com Prisma/PostgreSQL.
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '../../generated/prisma/client.js';
 import type {
   AdInsightDaily,
   AuditEntry,

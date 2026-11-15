@@ -89,3 +89,19 @@ O arquivo `render.yaml` na raiz descreve toda a stack: Postgres, API (com o work
 6. Ao configurar o WhatsApp, adicione `META_APP_SECRET` no serviço da API (Environment) e use o valor gerado de `WHATSAPP_WEBHOOK_VERIFY_TOKEN` no painel da Meta.
 
 Para separar o worker em outro serviço, crie um *Background Worker* com o mesmo Dockerfile, comando `node dist/worker.js`, as mesmas variáveis, e defina `RUN_WORKER_IN_API=false` na API.
+
+## Vercel
+
+Na Vercel o app vira **dois projetos** apontando para o mesmo repositório:
+
+| Projeto | Root Directory | O que roda |
+|---|---|---|
+| Painel | `apps/web` | Next.js |
+| API | `apps/api` | Fastify como função (entrada `apps/api/index.js`) |
+
+- **Banco:** Neon (Storage → Create Database → Neon), conectado ao projeto da API. A integração cria `DATABASE_URL` e `DATABASE_URL_UNPOOLED`.
+- **Build da API** (`apps/api/vercel.json` → `scripts/vercel-build.mjs`): gera o Prisma Client, compila, aplica as migrações (pela conexão direta) e roda o seed.
+- **Fila sem worker contínuo:** com `VERCEL=1` a API entra em modo `SERVERLESS`: depois de cada requisição a fila é processada em segundo plano (`waitUntil`), e o cron diário `/cron/tick` (protegido por `CRON_SECRET`) cobre os períodos sem movimento. A sincronização da Meta é enfileirada sempre que estiver mais velha que `META_SYNC_CRON_MINUTES`.
+- **Variáveis da API:** `JWT_SECRET`, `CREDENTIALS_ENCRYPTION_KEY`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `CRON_SECRET`, `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `APP_ENV` e, ao ligar o WhatsApp, `META_APP_SECRET`.
+- **Variável do painel:** `API_INTERNAL_URL=https://<projeto-da-api>.vercel.app`.
+- O plano Hobby da Vercel é só para uso pessoal/não comercial; para uso na clínica, use o Pro.

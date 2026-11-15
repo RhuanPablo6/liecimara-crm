@@ -17,6 +17,13 @@ const schema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().default(4),
   META_SYNC_CRON_MINUTES: z.coerce.number().default(60),
   LEAD_REOPEN_AFTER_DAYS: z.coerce.number().default(30),
+  // Ambiente sem processo contínuo (Vercel): a fila é processada após cada requisição.
+  SERVERLESS: z
+    .enum(['true', 'false', '1', '0', ''])
+    .default('false')
+    .transform((v) => v === 'true' || v === '1'),
+  // Segredo das tarefas agendadas (/cron/tick). Na Vercel, o cron envia "Authorization: Bearer <CRON_SECRET>".
+  CRON_SECRET: z.string().default(''),
   RUN_WORKER_IN_API: z
     .enum(['true', 'false', '1', '0', ''])
     .default('false')
@@ -26,11 +33,16 @@ const schema = z.object({
 export type Env = z.infer<typeof schema>;
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  // Na Render, a porta chega em PORT e a URL pública em RENDER_EXTERNAL_URL.
+  // Render: porta em PORT e URL pública em RENDER_EXTERNAL_URL.
+  // Vercel: VERCEL=1 e domínio de produção em VERCEL_PROJECT_PRODUCTION_URL.
   const parsed = schema.safeParse({
     ...source,
     API_PORT: source.API_PORT || source.PORT || undefined,
-    API_PUBLIC_URL: source.API_PUBLIC_URL || source.RENDER_EXTERNAL_URL || undefined,
+    API_PUBLIC_URL:
+      source.API_PUBLIC_URL ||
+      source.RENDER_EXTERNAL_URL ||
+      (source.VERCEL_PROJECT_PRODUCTION_URL ? `https://${source.VERCEL_PROJECT_PRODUCTION_URL}` : undefined),
+    SERVERLESS: source.SERVERLESS || (source.VERCEL ? 'true' : undefined),
   });
   if (!parsed.success) {
     const msg = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`).join('\n');

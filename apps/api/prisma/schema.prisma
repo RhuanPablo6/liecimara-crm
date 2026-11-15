@@ -7,9 +7,16 @@
 // ─────────────────────────────────────────────────────────────
 
 generator client {
-  provider   = "prisma-client-js"
-  // Engine sem binário Rust: usa o driver `pg` via @prisma/adapter-pg.
-  engineType = "client"
+  // Gerador novo: cliente em TypeScript dentro de src/, motor de consultas em WASM
+  // importado estaticamente (empacota sem arquivos extras na Vercel/serverless) e
+  // driver `pg` via @prisma/adapter-pg (sem binário Rust).
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  engineType             = "client"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
 }
 
 datasource db {
