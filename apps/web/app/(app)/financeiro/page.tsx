@@ -4,6 +4,7 @@ import { Download, Table2 } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { NewSaleDialog, SalesCard } from '@/components/finance-sales';
 import { ProceduresDialog } from '@/components/procedures-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -176,6 +177,7 @@ export default function FinancePage() {
   const [granularity, setGranularity] = useState<Granularity | null>(null);
   const [showTable, setShowTable] = useState(false);
   const [procVersion, setProcVersion] = useState(0);
+  const bump = () => setProcVersion((v) => v + 1);
 
   const { from, to } = preset === 'custom' ? custom : presetDates(preset);
   const g = granularity ?? autoGranularity(from, to);
@@ -206,10 +208,11 @@ export default function FinancePage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <ProceduresDialog onChanged={() => setProcVersion((v) => v + 1)} />
+          <ProceduresDialog onChanged={bump} />
           <Button variant="outline" disabled={!r} onClick={() => downloadCsv(r, true)}>
             <Download /> Exportar (Excel/CSV)
           </Button>
+          <NewSaleDialog onSaved={bump} />
         </div>
       </div>
 
@@ -422,6 +425,8 @@ export default function FinancePage() {
           )}
         </CardContent>
       </Card>
+
+      {valid && <SalesCard from={from} to={to} version={procVersion} onChanged={bump} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

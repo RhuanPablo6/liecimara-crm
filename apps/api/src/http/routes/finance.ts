@@ -31,7 +31,123 @@ const lastDayOf = (m: string) => {
   return `${m}-${String(new Date(Date.UTC(y, mm, 0)).getUTCDate()).padStart(2, '0')}`;
 };
 
+const SALE_METHODS = ['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH', 'BANK_TRANSFER', 'OTHER'] as const;
+const phone = z
+  .string()
+  .transform((v) => v.replace(/\D/g, ''))
+  .refine((v) => v.length >= 10 && v.length <= 15, 'WhatsApp inválido (use DDI + DDD + número)');
+
+const actorOf = (req: { user?: { sub: string }; ip: string }) => ({ id: req.user!.sub, ip: req.ip });
+
 export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard: Guard) {
+  // ── Vendas lançadas pelo Financeiro (pacientes de indicação, retorno, balcão...) ──
+
+  /** Procura o paciente pelo WhatsApp para mostrar quem é antes de lançar a venda. */
+  app.get('/finance/patient', { preHandler: guard('sales:write') }, async (req) => {
+    const { waId } = z.object({ waId: phone }).parse(req.query);
+    const contact = await c.repos.contacts.findByWaId(waId);
+    if (!contact) return { found: false };
+    const lead = (await c.repos.leads.findOpenByContact(contact.id)) ?? (await c.repos.leads.findLatestByContact(contact.id));
+    return {
+      found: true,
+      name: contact.name ?? contact.profileName ?? null,
+      leadId: lead?.id ?? null,
+      stage: lead?.stage ?? null,
+      attributionConfidence: lead?.attributionConfidence ?? null,
+    };
+  });
+
+  app.post('/finance/sales', { preHandler: guard('sales:write') }, async (req) => {
+    const b = z
+      .object({
+        waId: phone,
+        name: optionalText(120),
+        procedureId: z.string().min(1),
+        amountCents: z.number().int().positive('Informe o valor').max(10_000_000_00),
+        soldAt: day,
+        adMetaId: z.string().min(1).nullish(),
+        payment: z
+          .object({
+            method: z.enum(SALE_METHODS),
+            installments: z.number().int().min(1).max(24).default(1),
+            amountCents: z.number().int().positive().nullish(),
+            paidAt: day.nullish(),
+          })
+          .nullish(),
+      })
+      .parse(req.body);
+    if (b.payment?.amountCents && b.payment.amountCents > b.amountCents) {
+      throw new DomainError('VALIDATION', 'O valor recebido passa do valor da venda');
+    }
+    const actor = actorOf(req);
+
+    // Paciente: usa o lead em aberto, senão o último; se nunca falou com a clínica, cria.
+    const contact = await c.repos.contacts.findByWaId(b.waId);
+    let lead = contact ? ((await c.repos.leads.findOpenByContact(contact.id)) ?? (await c.repos.leads.findLatestByContact(contact.id))) : null;
+    if (contact && b.name && !contact.name) await c.repos.contacts.update(contact.id, { name: b.name });
+    if (!lead) lead = await c.funnel.createLeadManually({ waId: b.waId, name: b.name ?? undefined, procedureInterestId: b.procedureId }, actor);
+
+    const sale = await c.funnel.registerSale(
+      lead.id,
+      {
+        procedureId: b.procedureId,
+        amountCents: b.amountCents,
+        soldAt: dayToDate(b.soldAt),
+        manualAttribution:
+          b.adMetaId && lead.attributionConfidence === 'UNKNOWN'
+            ? { adMetaId: b.adMetaId, note: 'Origem informada ao lançar a venda no Financeiro' }
+            : null,
+      },
+      actor,
+    );
+    const payment = b.payment
+      ? await c.funnel.registerPayment(
+          sale.id,
+          {
+            amountCents: b.payment.amountCents ?? b.amountCents,
+            method: b.payment.method,
+            installments: b.payment.installments,
+            paidAt: dayToDate(b.payment.paidAt ?? b.soldAt),
+          },
+          actor,
+        )
+      : null;
+    return { sale, payment, leadId: lead.id };
+  });
+
+  /** Vendas do período com paciente, procedimento, origem e quanto já foi recebido. */
+  app.get('/finance/sales', { preHandler: guard('finance:read') }, async (req) => {
+    const q = z.object({ from: day, to: day }).parse(req.query);
+    const [sales, procedures, ads] = await Promise.all([
+      c.repos.sales.listSoldIn(dayRange(q.from, q.to)),
+      c.repos.procedures.list(),
+      c.repos.ads.listAds(),
+    ]);
+    const procName = new Map(procedures.map((p) => [p.id, p.name]));
+    const adName = new Map(ads.map((a) => [a.metaId, a.name]));
+    const rows = [];
+    for (const s of sales.sort((a, b) => b.soldAt.getTime() - a.soldAt.getTime())) {
+      const lead = await c.repos.leads.findById(s.leadId);
+      const contact = lead ? await c.repos.contacts.findById(lead.contactId) : null;
+      const payments = await c.repos.payments.listBySale(s.id);
+      rows.push({
+        id: s.id,
+        soldAt: s.soldAt,
+        status: s.status,
+        amountCents: s.amountCents,
+        paidCents: payments.reduce((t, p) => t + p.amountCents, 0),
+        payments: payments.map((p) => ({ amountCents: p.amountCents, method: p.method, installments: p.installments, paidAt: p.paidAt })),
+        procedureId: s.procedureId,
+        procedureName: procName.get(s.procedureId) ?? 'Procedimento removido',
+        leadId: s.leadId,
+        patientName: contact?.name ?? contact?.profileName ?? null,
+        waId: contact?.waId ?? null,
+        origin: s.adMetaId ? (adName.get(s.adMetaId) ?? 'Anúncio') : null,
+      });
+    }
+    return rows;
+  });
+
   app.get('/finance/report', { preHandler: guard('finance:read') }, async (req) => {
     const q = z
       .object({ from: day, to: day, granularity: z.enum(['day', 'week', 'month']).default('day') })
