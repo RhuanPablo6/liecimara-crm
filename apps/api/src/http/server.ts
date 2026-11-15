@@ -8,6 +8,7 @@ import type { TokenClaims } from '../modules/auth/auth.js';
 import { assertCan, type Permission } from '../modules/auth/rbac.js';
 import { registerAdsManagerRoutes } from './routes/adsManager.js';
 import { registerAgendaRoutes } from './routes/agenda.js';
+import { registerPublicAppointmentRoutes } from './routes/publicAppointments.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerFinanceRoutes } from './routes/finance.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
@@ -85,6 +86,7 @@ export function buildServer(c: Container) {
   registerAdsManagerRoutes(app, c, guard);
   registerRecallRoutes(app, c, guard);
   registerAgendaRoutes(app, c, guard);
+  registerPublicAppointmentRoutes(app, c);
 
   return app;
 }

@@ -59,7 +59,12 @@ type Appt = {
   notes: string | null;
   status: string;
   cancelReason: string | null;
+  patientResponse: string | null;
+  patientResponseAt: string | null;
+  patientNote: string | null;
 };
+
+const RESPONSE: Record<string, string> = { CONFIRMED: 'Confirmou pelo link', CANCELED: 'Desmarcou pelo link', RESCHEDULE: 'Pediu para remarcar' };
 
 /** Agendamentos que se sobrepõem ficam lado a lado. */
 function layout(list: Appt[]) {
@@ -319,6 +324,13 @@ function AppointmentDetails({ a, appts, procedures, onDone }: { a: Appt; appts: 
           {a.procedureName ?? 'Procedimento não definido'} · {phone(a.waId)}
         </p>
         <Badge variant={st.badge}>{st.label}</Badge>
+        {a.patientResponse && (
+          <p className="text-xs font-medium text-navy-700">
+            {RESPONSE[a.patientResponse]}
+            {a.patientResponseAt && ` em ${new Date(a.patientResponseAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+            {a.patientNote && ` · “${a.patientNote}”`}
+          </p>
+        )}
         {a.cancelReason && <p className="text-xs text-muted-foreground">Motivo: {a.cancelReason}</p>}
         {a.notes && !editing && <p className="rounded-md bg-secondary/60 px-3 py-2">{a.notes}</p>}
       </div>
@@ -347,8 +359,9 @@ function AppointmentDetails({ a, appts, procedures, onDone }: { a: Appt; appts: 
       {open && !editing && !canceling && (
         <MessageButton
           waId={a.waId}
+          appointmentId={a.id}
           use="CONFIRM"
-          label="Mensagem de confirmação"
+          label="Mensagem de confirmação (com link)"
           vars={{ nome: a.name, procedimento: a.procedureName, data: label(spDayOf(a.scheduledFor), { day: '2-digit', month: '2-digit' }), hora: hhmm(start) }}
         />
       )}
@@ -492,6 +505,15 @@ export default function AgendaPage() {
   const from = days[0]!;
   const to = addDays(view === 'week' ? addDays(mondayOf(anchor), 6) : days.at(-1)!, 1);
   const { data, error, reload } = useApi<Appt[]>(`/agenda?from=${toInstant(from, '00:00')}&to=${toInstant(to, '00:00')}`);
+  const { data: responses, reload: reloadResponses } = useApi<any[]>('/agenda/responses');
+  // As pacientes respondem pelo link a qualquer momento: atualiza sozinho a cada minuto e ao voltar para a aba.
+  useEffect(() => {
+    const refresh = () => (void reload(), void reloadResponses());
+    const t = setInterval(refresh, 60_000);
+    window.addEventListener('focus', refresh);
+    return () => (clearInterval(t), window.removeEventListener('focus', refresh));
+  }, [reload, reloadResponses]);
+  const handled = useAction();
   const appts = (data ?? []).filter((a) => showCanceled || a.status !== 'CANCELED');
   const byDay = useMemo(() => {
     const m = new Map<string, Appt[]>();
@@ -515,7 +537,7 @@ export default function AgendaPage() {
   const close = (changed: boolean) => {
     setCreating(null);
     setSelected(null);
-    if (changed) void reload();
+    if (changed) (void reload(), void reloadResponses());
   };
   const counts = {
     total: appts.filter((a) => a.status !== 'CANCELED').length,
@@ -579,6 +601,51 @@ export default function AgendaPage() {
       </div>
       <ErrorText>{error}</ErrorText>
 
+      {responses && responses.length > 0 && (
+        <div className="rounded-lg border bg-background">
+          <p className="border-b px-4 py-2 text-sm font-medium text-navy-800">Respostas das pacientes pelo link</p>
+          <div className="divide-y">
+            {responses.map((r) => (
+              <div key={r.id} className={cn('flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm', r.pending && 'bg-amber-50')}>
+                <div>
+                  <span className="font-medium">{r.name ?? phone(r.waId)}</span>{' '}
+                  <span className={cn(r.response === 'CONFIRMED' ? 'text-emerald-700' : r.response === 'CANCELED' ? 'text-red-700' : 'text-amber-800')}>
+                    · {RESPONSE[r.response]}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {' '}
+                    · horário de {new Date(r.scheduledFor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    {r.procedureName ? ` (${r.procedureName})` : ''}
+                  </span>
+                  {r.note && <p className="text-xs text-muted-foreground">“{r.note}”</p>}
+                </div>
+                {r.pending && (
+                  <div className="flex flex-wrap gap-1">
+                    <MessageButton waId={r.waId} use="GENERAL" label="Falar" vars={{ nome: r.name, procedimento: r.procedureName }} />
+                    <Button size="sm" variant="gold" onClick={() => setCreating({ day: today, time: '09:00', leadId: r.leadId, name: r.name ?? undefined })}>
+                      <CalendarCheck /> Marcar novo horário
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={handled.busy}
+                      onClick={() =>
+                        handled.run(async () => {
+                          await api(`/appointments/${r.id}/reschedule-handled`, { method: 'POST' });
+                          await reloadResponses();
+                        })
+                      }
+                    >
+                      Resolvido
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {view !== 'month' ? (
         <div ref={scroller} className="max-h-[72vh] overflow-y-auto rounded-lg border bg-background">
           {/* Cabeçalho dos dias (fixo no topo, na mesma rolagem da grade: colunas sempre alinhadas) */}
@@ -636,6 +703,7 @@ export default function AgendaPage() {
                         title={`${hhmm(start)} ${a.name ?? ''} · ${a.procedureName ?? ''} · ${st.label}`}
                       >
                         <p className="truncate font-semibold">
+                          {a.patientResponse === 'CONFIRMED' && '✓ '}
                           {hhmm(start)} {a.name ?? phone(a.waId)}
                         </p>
                         {height > 34 && <p className="truncate opacity-80">{a.procedureName ?? 'Avaliação'}</p>}

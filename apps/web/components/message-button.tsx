@@ -16,6 +16,7 @@ export interface MessageVars {
   hora?: string | null;
   valor?: string | null;
   ultima_vez?: string | null;
+  link?: string | null;
 }
 
 /** Troca {nome}, {primeiro_nome}... pelos dados da paciente. Campos vazios viram texto neutro. */
@@ -29,12 +30,13 @@ export function fillTemplate(body: string, vars: MessageVars, clinicName: string
     hora: vars.hora || '',
     valor: vars.valor || '',
     ultima_vez: vars.ultima_vez || '',
+    link: vars.link || '',
     clinica: clinicName,
   };
   return body
     .replace(/\{(\w+)\}/g, (m, k: string) => (k in map ? map[k]! : m))
     .replace(/Oi, !/g, 'Oi!')
-    .replace(/\s+([,.!?])/g, '$1');
+    .replace(/[ \t]+([,.!?])/g, '$1');
 }
 
 export const waLink = (waId: string, text: string) => `https://wa.me/${waId.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`;
@@ -51,7 +53,10 @@ export function MessageButton({
   size = 'sm',
   variant = 'outline',
   onSent,
+  appointmentId,
 }: {
+  /** Agendamento: inclui o link para a paciente confirmar, desmarcar ou remarcar. */
+  appointmentId?: string;
   waId: string | null | undefined;
   vars: MessageVars;
   use?: MessageUse;
@@ -62,15 +67,20 @@ export function MessageButton({
 }) {
   const [open, setOpen] = useState(false);
   const { data } = useApi<any>(open ? '/messages/templates' : null);
+  const { data: linkData } = useApi<any>(open && appointmentId ? `/appointments/${appointmentId}/link` : null);
+  const link = linkData?.token ? `${window.location.origin}/c/${linkData.token}` : null;
   const [templateId, setTemplateId] = useState('');
   const [text, setText] = useState('');
   const templates: any[] = data?.templates ?? [];
   const chosen = useMemo(() => templates.find((t) => t.id === templateId) ?? templates.find((t) => t.use === use) ?? templates[0], [templates, templateId, use]);
 
   useEffect(() => {
-    if (chosen && data) setText(fillTemplate(chosen.body, vars, data.clinicName));
+    if (!chosen || !data || (appointmentId && !link)) return;
+    // Modelo antigo sem {link}: acrescenta o link no fim quando for de agendamento.
+    const body = appointmentId && !chosen.body.includes('{link}') ? `${chosen.body}\n\nConfirme, desmarque ou remarque por aqui: {link}` : chosen.body;
+    setText(fillTemplate(body, { ...vars, link }, data.clinicName));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosen?.id, data?.clinicName]);
+  }, [chosen?.id, data?.clinicName, link]);
 
   if (!waId) return null;
   return (

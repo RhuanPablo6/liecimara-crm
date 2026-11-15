@@ -6,6 +6,7 @@ import type { Container } from '../../container.js';
 import { DomainError } from '../../domain/errors.js';
 import { ORGANIC_KEYS } from '../../domain/origin.js';
 import type { Lead } from '../../domain/types.js';
+import { appointmentToken } from '../../modules/agenda/appointmentLink.js';
 import type { Guard } from '../server.js';
 
 const actorOf = (req: { user?: { sub: string }; ip: string }) => ({ id: req.user!.sub, ip: req.ip });
@@ -36,6 +37,9 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
         notes: a.notes ?? null,
         status: a.status,
         cancelReason: a.cancelReason,
+        patientResponse: a.patientResponse ?? null,
+        patientResponseAt: a.patientResponseAt ?? null,
+        patientNote: a.patientNote ?? null,
       });
     }
     return out.sort((x, y) => x.scheduledFor.getTime() - y.scheduledFor.getTime());
@@ -95,7 +99,54 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
         leadId = created.id;
       }
     }
-    return c.funnel.scheduleAppointment(leadId, { scheduledFor: b.scheduledFor, procedureId: b.procedureId ?? null, durationMin: b.durationMin, notes: b.notes ?? null }, actor);
+    const created = await c.funnel.scheduleAppointment(leadId, { scheduledFor: b.scheduledFor, procedureId: b.procedureId ?? null, durationMin: b.durationMin, notes: b.notes ?? null }, actor);
+    // Novo horário para quem tinha pedido remarcação: o pedido sai da lista.
+    for (const old of await c.repos.appointments.listByLead(leadId)) {
+      if (old.patientResponse === 'RESCHEDULE' && !old.rescheduleHandled) await c.repos.appointments.update(old.id, { rescheduleHandled: true });
+    }
+    return created;
+  });
+
+  /** Link pessoal da paciente (para a mensagem de confirmação). */
+  app.get('/appointments/:id/link', { preHandler: guard('leads:read') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    if (!(await c.repos.appointments.findById(id))) throw new DomainError('NOT_FOUND', 'Agendamento não encontrado', 404);
+    return { token: appointmentToken(id, c.env.JWT_SECRET) };
+  });
+
+  /** Respostas das pacientes pelo link (últimos 3 dias) e pedidos de remarcação em aberto. */
+  app.get('/agenda/responses', { preHandler: guard('leads:read') }, async () => {
+    const since = Date.now() - 3 * 86_400_000;
+    const all = await c.repos.appointments.listScheduledBetween({ from: new Date(Date.now() - 120 * 86_400_000), to: new Date(Date.now() + 365 * 86_400_000) });
+    const procedures = new Map((await c.repos.procedures.list()).map((p) => [p.id, p.name]));
+    const rows = [];
+    for (const a of all) {
+      if (!a.patientResponse) continue;
+      const pending = a.patientResponse === 'RESCHEDULE' && !a.rescheduleHandled;
+      if (!pending && (!a.patientResponseAt || a.patientResponseAt.getTime() < since)) continue;
+      const lead = await c.repos.leads.findById(a.leadId);
+      const contact = lead ? await c.repos.contacts.findById(lead.contactId) : null;
+      rows.push({
+        id: a.id,
+        leadId: a.leadId,
+        contactId: contact?.id ?? null,
+        name: contact?.name ?? contact?.profileName ?? null,
+        waId: contact?.waId ?? null,
+        procedureName: a.procedureId ? (procedures.get(a.procedureId) ?? null) : null,
+        scheduledFor: a.scheduledFor,
+        response: a.patientResponse,
+        respondedAt: a.patientResponseAt,
+        note: a.patientNote ?? null,
+        pending,
+      });
+    }
+    return rows.sort((x, y) => Number(y.pending) - Number(x.pending) || (y.respondedAt?.getTime() ?? 0) - (x.respondedAt?.getTime() ?? 0));
+  });
+
+  app.post('/appointments/:id/reschedule-handled', { preHandler: guard('leads:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    await c.repos.appointments.update(id, { rescheduleHandled: true });
+    return { ok: true };
   });
 
   app.patch('/appointments/:id', { preHandler: guard('leads:write') }, async (req) => {

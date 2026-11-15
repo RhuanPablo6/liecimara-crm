@@ -201,13 +201,16 @@ export interface MessageTemplate {
 
 export interface TemplatesSettings {
   clinicName: string;
+  /** WhatsApp da clínica (para a paciente falar com a recepção a partir do link). */
+  clinicWhatsapp?: string | null;
   templates: MessageTemplate[];
 }
 
-export const PLACEHOLDERS = ['{nome}', '{primeiro_nome}', '{procedimento}', '{data}', '{hora}', '{clinica}', '{valor}', '{ultima_vez}'];
+export const PLACEHOLDERS = ['{nome}', '{primeiro_nome}', '{procedimento}', '{data}', '{hora}', '{clinica}', '{valor}', '{ultima_vez}', '{link}'];
 
 export const DEFAULT_TEMPLATES: TemplatesSettings = {
   clinicName: 'Clínica Dra. Liecimara Esteves',
+  clinicWhatsapp: '5511959699628',
   templates: [
     {
       id: 'return',
@@ -225,7 +228,7 @@ export const DEFAULT_TEMPLATES: TemplatesSettings = {
       id: 'confirm',
       name: 'Confirmação de agendamento',
       use: 'CONFIRM',
-      body: 'Oi, {primeiro_nome}! Passando para confirmar o seu horário de {procedimento} amanhã, {data}, às {hora}, aqui na {clinica}. Posso confirmar? 😊',
+      body: 'Oi, {primeiro_nome}! Passando para lembrar do seu horário de {procedimento} no dia {data}, às {hora}, aqui na {clinica} 😊\n\nToque no link para confirmar, desmarcar ou remarcar: {link}',
     },
     {
       id: 'postcare',

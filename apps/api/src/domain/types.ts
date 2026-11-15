@@ -211,6 +211,11 @@ export interface Appointment {
   /** Duração prevista em minutos (padrão 60). */
   durationMin?: number;
   notes?: string | null;
+  /** Resposta da paciente pelo link (confirmou, desmarcou ou pediu para remarcar). */
+  patientResponse?: 'CONFIRMED' | 'CANCELED' | 'RESCHEDULE' | null;
+  patientResponseAt?: Date | null;
+  patientNote?: string | null;
+  rescheduleHandled?: boolean;
   status: AppointmentStatus;
   cancelReason: string | null;
   createdById: string | null;

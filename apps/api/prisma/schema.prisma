@@ -326,6 +326,12 @@ model Appointment {
   /// Duração prevista (minutos) para a agenda
   durationMin   Int               @default(60)
   notes         String?
+  // Resposta da paciente pelo link da mensagem: CONFIRMED | CANCELED | RESCHEDULE
+  patientResponse   String?
+  patientResponseAt DateTime?
+  patientNote       String?
+  // Pedido de remarcação já tratado pela recepção
+  rescheduleHandled Boolean  @default(false)
   status        AppointmentStatus @default(SCHEDULED)
   cancelReason  String?
   createdById   String?

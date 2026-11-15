@@ -182,6 +182,7 @@ function ApptList({ rows, kind, onDone }: { rows: any[]; kind: 'confirm' | 'post
           <div className="flex flex-wrap gap-1">
             <MessageButton
               waId={a.waId}
+              appointmentId={kind === 'confirm' ? a.appointmentId : undefined}
               use={kind === 'confirm' ? 'CONFIRM' : 'POSTCARE'}
               variant="gold"
               label={kind === 'confirm' ? 'Confirmar pelo WhatsApp' : 'Mensagem de cuidado'}
@@ -226,6 +227,7 @@ const PLACEHOLDERS: [string, string][] = [
   ['{hora}', 'hora'],
   ['{valor}', 'valor (cobrança)'],
   ['{clinica}', 'nome da clínica'],
+  ['{link}', 'link para a paciente confirmar, desmarcar ou remarcar (só em agendamentos)'],
 ];
 
 function TemplatesEditor() {
@@ -235,15 +237,21 @@ function TemplatesEditor() {
 
 function TemplatesForm({ data, onSaved }: { data: any; onSaved: () => void }) {
   const [clinicName, setClinicName] = useState<string>(data.clinicName);
+  const [clinicWhatsapp, setClinicWhatsapp] = useState<string>(data.clinicWhatsapp ?? '');
   const [items, setItems] = useState<any[]>(data.templates);
   const [saved, setSaved] = useState(false);
   const { busy, error, run } = useAction();
   const set = (i: number, patch: any) => (setSaved(false), setItems((cur) => cur.map((t, idx) => (idx === i ? { ...t, ...patch } : t))));
   return (
     <div className="space-y-4">
-      <Field label="Nome da clínica nas mensagens">
-        <Input className="max-w-md" value={clinicName} onChange={(e) => (setSaved(false), setClinicName(e.target.value))} />
-      </Field>
+      <div className="grid max-w-2xl gap-3 sm:grid-cols-2">
+        <Field label="Nome da clínica nas mensagens">
+          <Input value={clinicName} onChange={(e) => (setSaved(false), setClinicName(e.target.value))} />
+        </Field>
+        <Field label="WhatsApp da clínica (botão na página da paciente)">
+          <Input inputMode="numeric" value={clinicWhatsapp} onChange={(e) => (setSaved(false), setClinicWhatsapp(e.target.value.replace(/\D/g, '')))} />
+        </Field>
+      </div>
       <div className="rounded-md bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
         Campos que o CRM preenche sozinho:{' '}
         {PLACEHOLDERS.map(([k, v]) => (
@@ -289,7 +297,7 @@ function TemplatesForm({ data, onSaved }: { data: any; onSaved: () => void }) {
           disabled={busy}
           onClick={() =>
             run(async () => {
-              await api('/messages/templates', { method: 'PUT', body: { clinicName, templates: items } });
+              await api('/messages/templates', { method: 'PUT', body: { clinicName, clinicWhatsapp: clinicWhatsapp || null, templates: items } });
               setSaved(true);
               onSaved();
             })

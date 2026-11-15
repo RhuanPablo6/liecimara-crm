@@ -36,6 +36,11 @@ export function registerRecallRoutes(app: FastifyInstance, c: Container, guard: 
     const b = z
       .object({
         clinicName: z.string().trim().min(2).max(120),
+        clinicWhatsapp: z
+          .string()
+          .transform((v) => v.replace(/\D/g, ''))
+          .refine((v) => !v || (v.length >= 12 && v.length <= 15), 'WhatsApp da clínica inválido (DDI + DDD + número)')
+          .nullish(),
         templates: z
           .array(
             z.object({

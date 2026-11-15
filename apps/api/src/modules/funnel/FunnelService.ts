@@ -199,6 +199,38 @@ export class FunnelService {
     });
   }
 
+  /**
+   * Resposta da paciente pelo link da mensagem. Confirmar → confirmado; desmarcar → cancelado;
+   * remarcar → libera o horário (cancelado) e entra em "pedidos de remarcação" para a recepção.
+   */
+  async patientRespond(appointmentId: string, action: 'CONFIRM' | 'CANCEL' | 'RESCHEDULE', note: string | null): Promise<Appointment> {
+    const actor = { id: 'paciente' };
+    const appt = await this.repos.appointments.findById(appointmentId);
+    if (!appt) throw new NotFoundError('Agendamento', appointmentId);
+    if (appt.status === 'ATTENDED' || appt.status === 'NO_SHOW') throw new DomainError('APPOINTMENT_DONE', 'Este horário já passou.');
+    if (appt.status === 'CANCELED') throw new DomainError('CANCELED', 'Este horário já foi desmarcado. Fale com a clínica para marcar outro.');
+    if (appt.scheduledFor.getTime() < this.clock.now().getTime()) throw new DomainError('APPOINTMENT_DONE', 'Este horário já passou.');
+    const clean = note?.trim().slice(0, 500) || null;
+    const now = this.clock.now();
+    if (action === 'CONFIRM') {
+      if (appt.status !== 'CONFIRMED') await this.setAppointmentStatus(appointmentId, 'CONFIRMED', actor);
+    } else {
+      const reason =
+        action === 'CANCEL'
+          ? `Paciente desmarcou pelo link${clean ? `: ${clean}` : ''}`
+          : `Paciente pediu para remarcar pelo link${clean ? `: ${clean}` : ''}`;
+      await this.cancelAppointment(appointmentId, reason, actor);
+    }
+    const updated = await this.repos.appointments.update(appointmentId, {
+      patientResponse: action === 'CONFIRM' ? 'CONFIRMED' : action === 'CANCEL' ? 'CANCELED' : 'RESCHEDULE',
+      patientResponseAt: now,
+      patientNote: clean,
+      rescheduleHandled: false,
+    });
+    await this.repos.leads.update(appt.leadId, { lastActivityAt: now });
+    return updated;
+  }
+
   /** Remarcar / ajustar: data e hora, duração, procedimento, observações. Mudou o horário → volta a "a confirmar". */
   async updateAppointment(
     appointmentId: string,
