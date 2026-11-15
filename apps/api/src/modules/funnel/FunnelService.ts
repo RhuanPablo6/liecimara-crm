@@ -1,4 +1,5 @@
 import { DomainError, NotFoundError } from '../../domain/errors.js';
+import { ORGANIC_ORIGINS, type OrganicOrigin } from '../../domain/origin.js';
 import {
   OPEN_STAGES,
   type Appointment,
@@ -40,6 +41,8 @@ export class FunnelService {
       procedureInterestId?: string | null;
       /** Origem informada no cadastro (ex.: código do anúncio na mensagem pronta). */
       attribution?: { adMetaId: string; note: string } | null;
+      /** Origem que não é anúncio (indicação, Instagram...). Ignorada se houver `attribution`. */
+      origin?: { type: OrganicOrigin; note?: string | null } | null;
     },
     actor: Actor,
   ): Promise<Lead> {
@@ -62,6 +65,8 @@ export class FunnelService {
         adSetMetaId: null,
         campaignMetaId: null,
         attributionEvidenceId: null,
+        originType: input.attribution ? null : (input.origin?.type ?? null),
+        originNote: input.attribution ? null : (input.origin?.note?.trim() || null),
         lostReason: null,
         lostNote: null,
         openedAt: now,
@@ -75,6 +80,38 @@ export class FunnelService {
       // Na mesma transação: se a origem não puder ser registrada, o lead também não é criado.
       if (input.attribution) return this.applyManualAttribution(r, lead, input.attribution.adMetaId, input.attribution.note, actor);
       return lead;
+    });
+  }
+
+  /**
+   * Origem que não é anúncio (indicação, Instagram, retorno...). Remove a atribuição manual a anúncio,
+   * se houver; a atribuição oficial (referência do WhatsApp) não pode ser trocada.
+   */
+  async setOrganicOrigin(leadId: string, type: OrganicOrigin | null, note: string | null, actor: Actor): Promise<Lead> {
+    if (type && !(type in ORGANIC_ORIGINS)) throw new DomainError('VALIDATION', 'Origem inválida');
+    return this.repos.tx(async (r) => {
+      const lead = await this.getLead(r, leadId);
+      if (lead.attributionConfidence === 'OFFICIAL_REFERRAL') {
+        throw new DomainError('ATTRIBUTION_ALREADY_OFFICIAL', 'Este lead veio de anúncio com confirmação oficial do WhatsApp; a origem não pode ser trocada.', 409);
+      }
+      const updated = await r.leads.update(leadId, {
+        originType: type,
+        originNote: type ? note?.trim() || null : null,
+        ...(lead.adMetaId
+          ? { attributionConfidence: 'UNKNOWN', adMetaId: null, adSetMetaId: null, campaignMetaId: null, attributionEvidenceId: null }
+          : {}),
+        lastActivityAt: this.clock.now(),
+      });
+      await r.audit.log({
+        userId: actor.id,
+        action: 'lead.origin',
+        entityType: 'Lead',
+        entityId: leadId,
+        before: { adMetaId: lead.adMetaId, originType: lead.originType ?? null, originNote: lead.originNote ?? null },
+        after: { originType: updated.originType ?? null, originNote: updated.originNote ?? null },
+        ip: actor.ip,
+      });
+      return updated;
     });
   }
 
@@ -381,6 +418,8 @@ export class FunnelService {
       adSetMetaId: ad.adSetMetaId,
       campaignMetaId: ad.campaignMetaId,
       attributionEvidenceId: ev.id,
+      originType: null,
+      originNote: null,
     });
     await r.audit.log({
       userId: actor.id,

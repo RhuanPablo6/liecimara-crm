@@ -136,6 +136,7 @@ export class MemoryRepos implements Repos {
     findById: async (id: string) => clone(this.s.contacts.get(id) ?? null),
     findByWaId: async (waId: string) => clone([...this.s.contacts.values()].find((c) => c.waId === waId) ?? null),
     findByBsuid: async (b: string) => clone([...this.s.contacts.values()].find((c) => c.bsuid === b) ?? null),
+    list: async () => clone([...this.s.contacts.values()]),
     create: async (d: Omit<Contact, 'id'>) => insert(this.s.contacts, d, 'ctc_'),
     update: async (id: string, d: Partial<Contact>) => patch(this.s.contacts, id, d),
   };

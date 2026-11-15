@@ -11,6 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ErrorText, Field, Input, NativeSelect } from '@/components/ui/form';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { api, useAction, useApi } from '@/lib/api';
+import { PatientTagBadge } from '@/components/patient-tag';
+import { Badge } from '@/components/ui/badge';
+import { ORGANIC_ORIGINS, ORIGIN_NOTE_HINT } from '@/lib/origins';
 import { dateTime, phone } from '@/lib/format';
 
 function NewLeadDialog() {
@@ -19,6 +22,9 @@ function NewLeadDialog() {
   const [name, setName] = useState('');
   const [adCode, setAdCode] = useState('');
   const [adMetaId, setAdMetaId] = useState('');
+  const [originType, setOriginType] = useState('AD');
+  const [originNote, setOriginNote] = useState('');
+  const [wallet, setWallet] = useState(false);
   const { data: ads } = useApi<any[]>('/ads');
   const { busy, error, run } = useAction();
 
@@ -48,6 +54,29 @@ function NewLeadDialog() {
         <Field label="Nome">
           <Input value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
+        <Field label="Como o paciente chegou?">
+          <NativeSelect
+            value={originType}
+            onChange={(e) => {
+              setOriginType(e.target.value);
+              setAdCode('');
+              setAdMetaId('');
+            }}
+          >
+            <option value="AD">Anúncio</option>
+            {ORGANIC_ORIGINS.map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        {originType !== 'AD' && (
+          <Field label="Detalhe">
+            <Input placeholder={ORIGIN_NOTE_HINT[originType]} value={originNote} onChange={(e) => setOriginNote(e.target.value)} />
+          </Field>
+        )}
+        {originType === 'AD' && (
         <Field label="Código do anúncio (opcional)">
           <Input
             className="font-mono uppercase"
@@ -60,12 +89,13 @@ function NewLeadDialog() {
             }}
           />
         </Field>
-        {code && (
+        )}
+        {originType === 'AD' && code && (
           <p className={matched ? 'text-sm text-emerald-700' : 'text-sm text-red-700'}>
             {matched ? `Anúncio: ${matched.name}${matched.campaignName ? ` · ${matched.campaignName}` : ''}` : `Nenhum anúncio com o código ${code}`}
           </p>
         )}
-        {!code && (
+        {originType === 'AD' && !code && (
           <Field label="Ou escolha o anúncio (se o paciente apagou o código)">
             <NativeSelect value={adMetaId} onChange={(e) => setAdMetaId(e.target.value)}>
               <option value="">Origem não informada</option>
@@ -78,14 +108,25 @@ function NewLeadDialog() {
             </NativeSelect>
           </Field>
         )}
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" className="size-4 accent-navy-700" checked={wallet} onChange={(e) => setWallet(e.target.checked)} />
+          Já é paciente da clínica (da carteira)
+        </label>
         <ErrorText>{error}</ErrorText>
         <Button
-          disabled={busy || (!!code && !matched)}
+          disabled={busy || (originType === 'AD' && !!code && !matched)}
           onClick={() =>
             run(async () => {
               const lead = await api('/leads', {
                 method: 'POST',
-                body: { waId, name: name || undefined, adCode: code || undefined, adMetaId: code ? undefined : adMetaId || undefined },
+                body: {
+                  waId,
+                  name: name || undefined,
+                  adCode: originType === 'AD' ? code || undefined : undefined,
+                  adMetaId: originType === 'AD' && !code ? adMetaId || undefined : undefined,
+                  origin: originType !== 'AD' ? { type: originType, note: originNote || null } : undefined,
+                  walletPatient: wallet ? true : undefined,
+                },
               });
               router.push(`/leads/${lead.id}`);
             })
@@ -151,7 +192,7 @@ export default function LeadsPage() {
             <TR>
               <TH>Contato</TH>
               <TH>Etapa</TH>
-              <TH>Anúncio de origem</TH>
+              <TH>Origem</TH>
               <TH>Atribuição</TH>
               <TH>Interesse</TH>
               <TH>Última atividade</TH>
@@ -162,16 +203,21 @@ export default function LeadsPage() {
               <TR key={l.id} className="cursor-pointer">
                 <TD>
                   <Link href={`/leads/${l.id}`} className="block">
-                    <p className="font-medium text-navy-800">{l.contact?.name ?? 'Sem nome'}</p>
+                    <p className="font-medium text-navy-800">
+                      {l.contact?.name ?? 'Sem nome'}
+                      {l.patientTag === 'WALLET' && <PatientTagBadge tag="WALLET" />}
+                    </p>
                     <p className="text-xs text-muted-foreground">{phone(l.contact?.waId)}</p>
                   </Link>
                 </TD>
                 <TD>
                   <StageBadge stage={l.stage} />
                 </TD>
-                <TD className="max-w-[220px] truncate text-sm">{l.adName ?? '—'}</TD>
+                <TD className="max-w-[220px] truncate text-sm">
+                  {l.adName ?? (l.origin && l.origin !== 'UNKNOWN' ? l.originLabel : '—')}
+                </TD>
                 <TD>
-                  <ConfidenceBadge value={l.attributionConfidence} />
+                  {!l.adMetaId && l.originType ? <Badge variant="secondary">Informada</Badge> : <ConfidenceBadge value={l.attributionConfidence} />}
                 </TD>
                 <TD className="text-sm">{l.procedureInterest ?? '—'}</TD>
                 <TD className="text-sm text-muted-foreground">{dateTime(l.lastActivityAt)}</TD>

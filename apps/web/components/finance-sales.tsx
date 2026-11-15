@@ -11,6 +11,7 @@ import { ErrorText, Field, Input, NativeSelect } from '@/components/ui/form';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { api, useAction, useApi } from '@/lib/api';
 import { brl, date, parseBRL, phone } from '@/lib/format';
+import { ORGANIC_ORIGINS, ORIGIN_NOTE_HINT } from '@/lib/origins';
 
 export const SALE_METHODS: Record<string, string> = {
   PIX: 'Pix',
@@ -93,6 +94,9 @@ function SaleForm({ onDone }: { onDone: () => void }) {
   const [amount, setAmount] = useState('');
   const [soldAt, setSoldAt] = useState(today());
   const [adMetaId, setAdMetaId] = useState('');
+  const [originType, setOriginType] = useState('');
+  const [originNote, setOriginNote] = useState('');
+  const [wallet, setWallet] = useState(false);
   const [received, setReceived] = useState<'full' | 'partial' | 'none'>('full');
   const [paid, setPaid] = useState('');
   const [method, setMethod] = useState('PIX');
@@ -103,7 +107,7 @@ function SaleForm({ onDone }: { onDone: () => void }) {
 
   const amountCents = parseBRL(amount);
   const paidCents = received === 'partial' ? parseBRL(paid) : null;
-  const askOrigin = !patient?.found || patient.attributionConfidence === 'UNKNOWN';
+  const askOrigin = !patient?.found || patient.origin === 'UNKNOWN';
   const valid =
     waId.length >= 12 && !!procedureId && !!amountCents && !!soldAt && (received !== 'partial' || (!!paidCents && paidCents < amountCents!));
 
@@ -166,9 +170,33 @@ function SaleForm({ onDone }: { onDone: () => void }) {
           <Input type="date" max={today()} value={soldAt} onChange={(e) => setSoldAt(e.target.value)} />
         </Field>
         {askOrigin && (
-          <Field label="Veio de algum anúncio? (opcional)">
+          <Field label="Como o paciente chegou?">
+            <NativeSelect
+              value={originType}
+              onChange={(e) => {
+                setOriginType(e.target.value);
+                setAdMetaId('');
+              }}
+            >
+              <option value="">Não informar</option>
+              <option value="AD">Anúncio</option>
+              {ORGANIC_ORIGINS.map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </NativeSelect>
+          </Field>
+        )}
+        {askOrigin && originType && originType !== 'AD' && (
+          <Field label="Detalhe da origem">
+            <Input placeholder={ORIGIN_NOTE_HINT[originType]} value={originNote} onChange={(e) => setOriginNote(e.target.value)} />
+          </Field>
+        )}
+        {askOrigin && originType === 'AD' && (
+          <Field label="Qual anúncio?">
             <NativeSelect value={adMetaId} onChange={(e) => setAdMetaId(e.target.value)}>
-              <option value="">Não / não sabe</option>
+              <option value="">Não sabe qual</option>
               {(ads ?? [])
                 .filter((a) => a.status === 'ACTIVE' || a.code)
                 .map((a) => (
@@ -182,6 +210,12 @@ function SaleForm({ onDone }: { onDone: () => void }) {
         )}
       </div>
 
+      {!patient?.found && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" className="size-4 accent-navy-700" checked={wallet} onChange={(e) => setWallet(e.target.checked)} />
+          Já era paciente da clínica antes do CRM (da carteira)
+        </label>
+      )}
       <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
         <Field label="Recebimento">
           <NativeSelect value={received} onChange={(e) => setReceived(e.target.value as any)}>
@@ -223,7 +257,9 @@ function SaleForm({ onDone }: { onDone: () => void }) {
                 procedureId,
                 amountCents,
                 soldAt,
-                adMetaId: askOrigin && adMetaId ? adMetaId : null,
+                adMetaId: askOrigin && originType === 'AD' && adMetaId ? adMetaId : null,
+                origin: askOrigin && originType && originType !== 'AD' ? { type: originType, note: originNote || null } : null,
+                walletPatient: wallet ? true : null,
                 dueAt: received !== 'full' && dueAt ? dueAt : null,
                 payment:
                   received === 'none'

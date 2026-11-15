@@ -13,6 +13,8 @@
 
 import type { Repos } from '../../ports/repositories.js';
 import { addDays, dayRange, daysBetween, mondayOf, spDay } from '../../shared/days.js';
+import { ORIGIN_LABELS, originOf, type OriginType } from '../../domain/origin.js';
+import type { Sale } from '../../domain/types.js';
 import { DEFAULT_FEE_RULES, FEE_SETTINGS_KEY, type FeeRule, feeOf } from './accounts.js';
 
 export type Granularity = 'day' | 'week' | 'month';
@@ -70,6 +72,10 @@ export interface FinanceReport {
   };
   byProcedure: ProcedureRow[];
   expensesByCategory: { category: string; amountCents: number; pendingCents: number }[];
+  /** Faturamento por origem do paciente (anúncio, indicação, Instagram...). */
+  byOrigin: { type: OriginType; label: string; salesCount: number; revenueCents: number }[];
+  /** Primeira compra de paciente novo × compras de quem já é da carteira. */
+  patients: { newSales: number; newRevenueCents: number; walletSales: number; walletRevenueCents: number };
   series: SeriesPoint[];
 }
 
@@ -300,6 +306,36 @@ export class FinanceService {
       a.procedureId === NO_PROCEDURE ? 1 : b.procedureId === NO_PROCEDURE ? -1 : b.revenueCents - a.revenueCents || a.name.localeCompare(b.name, 'pt-BR'),
     );
 
+    // Origem e paciente novo × carteira (olha todas as compras para saber qual foi a primeira).
+    const [allLeads, allSales, contacts] = await Promise.all([
+      this.repos.leads.list({ limit: 1_000_000 }),
+      this.repos.sales.listSoldIn({ from: new Date('2000-01-01T00:00:00Z'), to: new Date('2999-12-31T00:00:00Z') }),
+      this.repos.contacts.list(),
+    ]);
+    const leadById = new Map(allLeads.map((l) => [l.id, l]));
+    const wallet = new Map(contacts.map((c) => [c.id, c.walletPatient ?? null]));
+    const firstSaleOf = new Map<string, Sale>();
+    for (const s of allSales) {
+      if (s.status !== 'ACTIVE') continue;
+      const cid = leadById.get(s.leadId)?.contactId;
+      if (!cid) continue;
+      const cur = firstSaleOf.get(cid);
+      if (!cur || s.soldAt < cur.soldAt) firstSaleOf.set(cid, s);
+    }
+    const origins = new Map<OriginType, { salesCount: number; revenueCents: number }>();
+    const patients = { newSales: 0, newRevenueCents: 0, walletSales: 0, walletRevenueCents: 0 };
+    for (const s of sales) {
+      if (s.status !== 'ACTIVE' || !inPeriod(spDay(s.soldAt))) continue;
+      const lead = leadById.get(s.leadId);
+      const o: OriginType = s.adMetaId ? 'AD' : lead ? originOf(lead) : 'UNKNOWN';
+      const cur = origins.get(o) ?? { salesCount: 0, revenueCents: 0 };
+      origins.set(o, { salesCount: cur.salesCount + 1, revenueCents: cur.revenueCents + s.amountCents });
+      const cid = lead?.contactId;
+      const isNew = !!cid && wallet.get(cid) !== true && firstSaleOf.get(cid)?.id === s.id;
+      if (isNew) (patients.newSales++, (patients.newRevenueCents += s.amountCents));
+      else (patients.walletSales++, (patients.walletRevenueCents += s.amountCents));
+    }
+
     const costsCents = suppliesCents + rentalCents + adSpendCents + feesCents + expensesCents;
     const profitCents = revenueCents - costsCents;
     return {
@@ -324,6 +360,8 @@ export class FinanceService {
       },
       byProcedure,
       expensesByCategory: [...byCategory].map(([category, v]) => ({ category, ...v })).sort((a, b) => b.amountCents - a.amountCents),
+      byOrigin: [...origins].map(([type, v]) => ({ type, label: ORIGIN_LABELS[type], ...v })).sort((a, b) => b.revenueCents - a.revenueCents),
+      patients,
       series: [...series.values()],
     };
   }

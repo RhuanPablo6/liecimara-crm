@@ -50,6 +50,8 @@ export interface Contact {
   name: string | null;
   profileName: string | null;
   preExisting: boolean;
+  /** "Da carteira" marcado à mão; null/ausente = automático. */
+  walletPatient?: boolean | null;
   firstSeenAt: Date;
   lastMessageAt: Date | null;
   removedFromAppAt: Date | null;
@@ -122,6 +124,9 @@ export interface Lead {
   adSetMetaId: string | null;
   campaignMetaId: string | null;
   attributionEvidenceId: string | null;
+  /** Origem quando não veio de anúncio (ver domain/origin.ts). */
+  originType?: string | null;
+  originNote?: string | null;
   lostReason: LostReason | null;
   lostNote: string | null;
   openedAt: Date;

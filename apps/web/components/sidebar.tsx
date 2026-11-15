@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, CalendarClock, KanbanSquare, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, Target, Users, Wallet } from 'lucide-react';
+import { BarChart3, CalendarClock, KanbanSquare, HeartHandshake, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, Target, Users, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 const NAV = [
   { href: '/', label: 'Painel', icon: LayoutDashboard },
   { href: '/leads', label: 'Leads', icon: Users },
+  { href: '/pacientes', label: 'Pacientes', icon: HeartHandshake },
   { href: '/funil', label: 'Funil', icon: KanbanSquare },
   { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { href: '/anuncios', label: 'Anúncios', icon: Megaphone },

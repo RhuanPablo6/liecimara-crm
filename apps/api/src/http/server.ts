@@ -10,6 +10,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerFinanceRoutes } from './routes/finance.js';
 import { registerIntegrationRoutes } from './routes/integrations.js';
 import { registerLeadRoutes } from './routes/leads.js';
+import { registerPatientRoutes } from './routes/patients.js';
 import { registerPurchaseRoutes } from './routes/purchases.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
@@ -77,6 +78,7 @@ export function buildServer(c: Container) {
   registerIntegrationRoutes(app, c, guard);
   registerPurchaseRoutes(app, c, guard);
   registerFinanceRoutes(app, c, guard);
+  registerPatientRoutes(app, c, guard);
 
   return app;
 }

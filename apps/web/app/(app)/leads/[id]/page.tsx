@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ErrorText, Field, Input, NativeSelect, Textarea } from '@/components/ui/form';
 import { api, useAction, useApi } from '@/lib/api';
+import { ORGANIC_ORIGINS, ORIGIN_LABEL, ORIGIN_NOTE_HINT } from '@/lib/origins';
+import { PatientTagControl } from '@/components/patient-tag';
 import { brl, date, dateTime, parseBRL, phone } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -89,6 +91,8 @@ function ActionDialog({ trigger, title, children }: { trigger: React.ReactNode; 
   );
 }
 
+const APPT_LABEL: Record<string, string> = { SCHEDULED: 'Agendado', CONFIRMED: 'Confirmado', ATTENDED: 'Compareceu', NO_SHOW: 'Faltou' };
+
 export default function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data, reload } = useApi(`/leads/${id}`);
@@ -111,6 +115,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [remNote, setRemNote] = useState('Retornar contato');
   const [attrAd, setAttrAd] = useState('');
   const [attrNote, setAttrNote] = useState('');
+  const [orgType, setOrgType] = useState('');
+  const [orgNote, setOrgNote] = useState('');
 
   if (!data) return <p className="text-muted-foreground">Carregando…</p>;
   const { lead, contact, ad, evidence, appointments, sales, performed, reminders, messages } = data;
@@ -143,11 +149,23 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               </a>
             )}
             {contact?.preExisting && <Badge variant="secondary">Paciente já cadastrado no app</Badge>}
+            {contact?.id && (
+              <PatientTagControl contactId={contact.id} tag={lead.patientTag} manual={lead.patientTagManual} onChanged={reload} />
+            )}
+            {contact?.id && (
+              <Link className="text-navy-600 hover:underline" href={`/pacientes/${contact.id}`}>
+                Ver histórico do paciente
+              </Link>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <StageBadge stage={lead.stage} />
-          <ConfidenceBadge value={lead.attributionConfidence} long />
+          {!lead.adMetaId && lead.originType ? (
+            <Badge variant="secondary">Origem: {ORIGIN_LABEL[lead.originType] ?? lead.originType}</Badge>
+          ) : (
+            <ConfidenceBadge value={lead.attributionConfidence} long />
+          )}
         </div>
       </div>
 
@@ -168,9 +186,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   <p className="font-medium text-navy-800">{ad?.name ?? lead.adName}</p>
                   <p className="text-xs text-muted-foreground">ID do anúncio {lead.adMetaId}</p>
                 </div>
+              ) : lead.originType ? (
+                <div className="rounded-md border p-3">
+                  <p className="font-medium text-navy-800">{ORIGIN_LABEL[lead.originType] ?? lead.originType}</p>
+                  {lead.originNote && <p className="text-xs text-muted-foreground">{lead.originNote}</p>}
+                </div>
               ) : (
                 <p className="text-muted-foreground">
-                  Nenhuma evidência de anúncio. O CRM não presume a origem; se o paciente informar de qual anúncio veio, registre abaixo.
+                  Origem não informada. Se o paciente veio de anúncio, de indicação ou de outro lugar, registre abaixo.
                 </p>
               )}
               {evidence.length > 0 && (
@@ -187,11 +210,54 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 </ul>
               )}
               {lead.attributionConfidence !== 'OFFICIAL_REFERRAL' && (
+                <div className="flex flex-wrap gap-2">
+                <ActionDialog
+                  title="Não veio de anúncio"
+                  trigger={
+                    <Button size="sm" variant="outline">
+                      {lead.originType ? 'Alterar origem' : 'Indicação ou outra origem'}
+                    </Button>
+                  }
+                >
+                  {(close) => (
+                    <div className="space-y-4">
+                      <Field label="Como o paciente chegou?">
+                        <NativeSelect value={orgType} onChange={(e) => setOrgType(e.target.value)}>
+                          <option value="">Selecione…</option>
+                          {ORGANIC_ORIGINS.map(([k, v]) => (
+                            <option key={k} value={k}>
+                              {v}
+                            </option>
+                          ))}
+                        </NativeSelect>
+                      </Field>
+                      {orgType && (
+                        <Field label="Detalhe">
+                          <Input placeholder={ORIGIN_NOTE_HINT[orgType]} value={orgNote} onChange={(e) => setOrgNote(e.target.value)} />
+                        </Field>
+                      )}
+                      {lead.adMetaId && <p className="text-xs text-amber-700">O anúncio informado antes será removido deste lead.</p>}
+                      <div className="flex gap-2">
+                        <Button
+                          disabled={!orgType || act.busy}
+                          onClick={() => call(() => api(`/leads/${id}/origin`, { method: 'PUT', body: { type: orgType, note: orgNote || null } }), close)}
+                        >
+                          Salvar origem
+                        </Button>
+                        {lead.originType && (
+                          <Button variant="ghost" disabled={act.busy} onClick={() => call(() => api(`/leads/${id}/origin`, { method: 'PUT', body: { type: null } }), close)}>
+                            Limpar origem
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </ActionDialog>
                 <ActionDialog
                   title="Informar anúncio de origem"
                   trigger={
                     <Button size="sm" variant="outline">
-                      Informar origem manualmente
+                      Veio de anúncio
                     </Button>
                   }
                 >
@@ -225,6 +291,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
                 </ActionDialog>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -463,7 +530,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                   <div>
                     <p className="text-sm font-medium">{dateTime(a.scheduledFor)}</p>
                     <p className="text-xs text-muted-foreground">
-                      {procName(a.procedureId)} · {a.status === 'CANCELED' ? `Cancelado: ${a.cancelReason}` : a.status}
+                      {procName(a.procedureId)} · {a.status === 'CANCELED' ? `Cancelado: ${a.cancelReason}` : (APPT_LABEL[a.status] ?? a.status)}
                     </p>
                   </div>
                   {(a.status === 'SCHEDULED' || a.status === 'CONFIRMED') && (

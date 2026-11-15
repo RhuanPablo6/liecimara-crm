@@ -448,6 +448,57 @@ export default function FinancePage() {
         </CardContent>
       </Card>
 
+      {r && (r.byOrigin.length > 0 || r.patients.newSales + r.patients.walletSales > 0) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Faturamento por origem</CardTitle>
+              <CardDescription>
+                Anúncio, indicação, Instagram… Registre a origem no lead ou na venda. Veja cada paciente em <Link className="underline" href="/pacientes">Pacientes</Link>.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {r.byOrigin.map((o: any) => (
+                <div key={o.type} className="space-y-1">
+                  <div className="flex items-baseline justify-between gap-2 text-sm">
+                    <span>
+                      {o.label} <span className="text-muted-foreground">· {num(o.salesCount)} venda(s)</span>
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {brl(o.revenueCents)}
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">{pctText(t.revenueCents ? (o.revenueCents / t.revenueCents) * 100 : null)}</span>
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-secondary">
+                    <div className="h-2 rounded-full" style={{ width: `${t.revenueCents ? (o.revenueCents / t.revenueCents) * 100 : 0}%`, background: C_REVENUE }} />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Pacientes novos × carteira</CardTitle>
+              <CardDescription>Primeira compra de paciente novo contra compras de quem já é da carteira.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4">
+              {[
+                ['Pacientes novos', r.patients.newSales, r.patients.newRevenueCents],
+                ['Da carteira', r.patients.walletSales, r.patients.walletRevenueCents],
+              ].map(([label, n, cents]) => (
+                <div key={label as string} className="rounded-md border p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                  <p className="mt-1 text-2xl font-semibold tabular-nums text-navy-800">{brl(cents as number)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {num(n as number)} venda(s) · {pctText(t.revenueCents ? ((cents as number) / t.revenueCents) * 100 : null)} do faturamento
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {valid && <SalesCard from={from} to={to} version={procVersion} onChanged={bump} />}
 
       <div className="grid gap-6 lg:grid-cols-2">

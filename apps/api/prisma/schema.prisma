@@ -72,6 +72,8 @@ model Contact {
   profileName       String?
   // Já era contato/paciente antes do CRM (importado via histórico/contatos)
   preExisting       Boolean   @default(false)
+  // Etiqueta "da carteira" definida à mão (null = automática: já comprou → carteira)
+  walletPatient     Boolean?
   firstSeenAt       DateTime
   lastMessageAt     DateTime?
   removedFromAppAt  DateTime?
@@ -233,6 +235,10 @@ model Lead {
   campaignMetaId        String?
   // Evidência que sustenta a atribuição atual
   attributionEvidenceId String?
+  // Origem quando não veio de anúncio: REFERRAL, INSTAGRAM, GOOGLE, RETURNING, WALK_IN, OTHER
+  originType            String?
+  // Detalhe da origem (ex.: "indicada pela Maria Souza")
+  originNote            String?
   lostReason            LostReason?
   lostNote              String?
   openedAt              DateTime // instante (WhatsApp) da primeira mensagem do lead

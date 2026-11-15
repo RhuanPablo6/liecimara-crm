@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { Container } from '../../container.js';
 import { CONFIDENCE_LABELS_PT, LOST_REASON_LABELS_PT, STAGE_LABELS_PT, type Lead } from '../../domain/types.js';
+import { ORGANIC_KEYS, ORIGIN_LABELS, originOf } from '../../domain/origin.js';
+import { tagOf } from '../../modules/patients/PatientsService.js';
 import { DomainError } from '../../domain/errors.js';
 import { nextFreeCodes, normalizeAdCode, suggestedMessage } from '../../modules/ads/adCodes.js';
 import { actorOf, type Guard } from '../server.js';
@@ -16,6 +18,18 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
   async function present(leads: Lead[]) {
     const procedures = new Map((await c.repos.procedures.list()).map((p) => [p.id, p.name]));
     const ads = new Map((await c.repos.ads.listAds()).map((a) => [a.metaId, a.name]));
+    // Etiqueta novo/carteira: compras ativas de qualquer atendimento do mesmo contato.
+    const [allLeads, allSales] = await Promise.all([
+      c.repos.leads.list({ limit: 1_000_000 }),
+      c.repos.sales.listSoldIn({ from: new Date('2000-01-01T00:00:00Z'), to: new Date('2999-12-31T00:00:00Z') }),
+    ]);
+    const contactOfLead = new Map(allLeads.map((l) => [l.id, l.contactId]));
+    const purchasesByContact = new Map<string, number>();
+    for (const sale of allSales) {
+      if (sale.status !== 'ACTIVE') continue;
+      const cid = contactOfLead.get(sale.leadId);
+      if (cid) purchasesByContact.set(cid, (purchasesByContact.get(cid) ?? 0) + 1);
+    }
     return Promise.all(
       leads.map(async (l) => {
         const contact = await c.repos.contacts.findById(l.contactId);
@@ -26,6 +40,10 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
           procedureInterest: l.procedureInterestId ? procedures.get(l.procedureInterestId) ?? null : null,
           stageLabel: STAGE_LABELS_PT[l.stage],
           confidenceLabel: CONFIDENCE_LABELS_PT[l.attributionConfidence],
+          origin: originOf(l),
+          originLabel: ORIGIN_LABELS[originOf(l)],
+          patientTag: contact ? tagOf(contact, purchasesByContact.get(contact.id) ?? 0) : 'NEW',
+          patientTagManual: contact?.walletPatient != null,
         };
       }),
     );
@@ -87,6 +105,9 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
         // Origem: código do anúncio (da mensagem pronta) OU o anúncio escolhido na lista.
         adCode: z.string().trim().max(20).optional().or(z.literal('')),
         adMetaId: z.string().trim().optional().or(z.literal('')),
+        // Origem que não é anúncio (indicação, Instagram...) e etiqueta "da carteira".
+        origin: z.object({ type: z.enum(ORGANIC_KEYS as [string, ...string[]]), note: z.string().max(200).nullish() }).nullish(),
+        walletPatient: z.boolean().nullish(),
       })
       .parse(req.body);
     let attribution: { adMetaId: string; note: string } | null = null;
@@ -103,10 +124,12 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
     } else if (b.adMetaId) {
       attribution = { adMetaId: b.adMetaId, note: 'Anúncio informado pela recepção no cadastro do lead' };
     }
-    return c.funnel.createLeadManually(
-      { waId: b.waId, name: b.name, procedureInterestId: b.procedureInterestId, attribution },
+    const lead = await c.funnel.createLeadManually(
+      { waId: b.waId, name: b.name, procedureInterestId: b.procedureInterestId, attribution, origin: (b.origin as any) ?? null },
       actorOf(req),
     );
+    if (b.walletPatient != null) await c.repos.contacts.update(lead.contactId, { walletPatient: b.walletPatient });
+    return lead;
   });
 
   app.get('/leads/:id', { preHandler: guard('leads:read') }, async (req) => {

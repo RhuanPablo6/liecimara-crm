@@ -49,6 +49,7 @@ export interface ContactRepo {
   findById(id: string): Promise<Contact | null>;
   findByWaId(waId: string): Promise<Contact | null>;
   findByBsuid(bsuid: string): Promise<Contact | null>;
+  list(): Promise<Contact[]>;
   create(data: Create<Contact>): Promise<Contact>;
   update(id: string, data: Partial<Contact>): Promise<Contact>;
 }

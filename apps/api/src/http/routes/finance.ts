@@ -6,6 +6,7 @@ import { DomainError } from '../../domain/errors.js';
 import { CASH_SETTINGS_KEY, DEFAULT_FEE_RULES, FEE_SETTINGS_KEY } from '../../modules/finance/accounts.js';
 import { checkPeriod } from '../../modules/finance/FinanceService.js';
 import { GOALS_SETTINGS_KEY, type GoalsSettings } from '../../modules/finance/goals.js';
+import { ORGANIC_KEYS, ORIGIN_LABELS, originOf } from '../../domain/origin.js';
 import { addDays, dayRange, daysBetween, dayToDate, isDay, spDay } from '../../shared/days.js';
 import type { Guard } from '../server.js';
 
@@ -56,6 +57,7 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
       leadId: lead?.id ?? null,
       stage: lead?.stage ?? null,
       attributionConfidence: lead?.attributionConfidence ?? null,
+      origin: lead ? originOf(lead) : 'UNKNOWN',
     };
   });
 
@@ -70,6 +72,9 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
         adMetaId: z.string().min(1).nullish(),
         /** Previsão para receber o saldo em aberto. */
         dueAt: day.nullish(),
+        /** Origem que não é anúncio (indicação, Instagram, retorno...). */
+        origin: z.object({ type: z.enum(ORGANIC_KEYS as [string, ...string[]]), note: z.string().max(200).nullish() }).nullish(),
+        walletPatient: z.boolean().nullish(),
         payment: z
           .object({
             method: z.enum(SALE_METHODS),
@@ -89,7 +94,15 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
     const contact = await c.repos.contacts.findByWaId(b.waId);
     let lead = contact ? ((await c.repos.leads.findOpenByContact(contact.id)) ?? (await c.repos.leads.findLatestByContact(contact.id))) : null;
     if (contact && b.name && !contact.name) await c.repos.contacts.update(contact.id, { name: b.name });
-    if (!lead) lead = await c.funnel.createLeadManually({ waId: b.waId, name: b.name ?? undefined, procedureInterestId: b.procedureId }, actor);
+    if (!lead) {
+      lead = await c.funnel.createLeadManually(
+        { waId: b.waId, name: b.name ?? undefined, procedureInterestId: b.procedureId, origin: b.adMetaId ? null : ((b.origin as any) ?? null) },
+        actor,
+      );
+    } else if (b.origin && !b.adMetaId && lead.attributionConfidence === 'UNKNOWN' && !lead.adMetaId && !lead.originType) {
+      lead = await c.funnel.setOrganicOrigin(lead.id, b.origin.type as any, b.origin.note ?? null, actor);
+    }
+    if (b.walletPatient != null) await c.repos.contacts.update(lead.contactId, { walletPatient: b.walletPatient });
 
     const sale = await c.funnel.registerSale(
       lead.id,
@@ -147,7 +160,7 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
         leadId: s.leadId,
         patientName: contact?.name ?? contact?.profileName ?? null,
         waId: contact?.waId ?? null,
-        origin: s.adMetaId ? (adName.get(s.adMetaId) ?? 'Anúncio') : null,
+        origin: s.adMetaId ? (adName.get(s.adMetaId) ?? 'Anúncio') : lead && originOf(lead) !== 'UNKNOWN' ? ORIGIN_LABELS[originOf(lead)] : null,
         dueAt: s.dueAt ?? null,
       });
     }
