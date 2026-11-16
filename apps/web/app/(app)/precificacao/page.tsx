@@ -1,8 +1,8 @@
 'use client';
 
-import { AlertTriangle, CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMe } from '@/components/access';
 import { ConfirmButton } from '@/components/confirm-button';
 import { SheetEditor, money, num, pctText, toMoney } from '@/components/pricing/sheet-editor';
@@ -51,6 +51,70 @@ function Health({ r, price }: { r: any; price: number | null }) {
     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800">
       <CheckCircle2 className="size-3" /> Saudável
     </span>
+  );
+}
+
+// ── Ordenação ────────────────────────────────────────────
+
+type SortKey = 'name' | 'time' | 'cost' | 'minimum' | 'suggested' | 'current' | 'margin' | 'health';
+type Sort = { key: SortKey; dir: 'asc' | 'desc' };
+
+const healthRank = (r: any) => {
+  if (!r.result) return null;
+  if (r.result.error || !r.currentPriceCents) return 3;
+  if (r.currentPriceCents < r.result.minimumCents) return 0; // prejuízo primeiro
+  if (r.result.currentMarginPct < r.result.marginPct - 0.05) return 1;
+  return 2;
+};
+const sortValue = (r: any, key: SortKey): string | number | null => {
+  switch (key) {
+    case 'name':
+      return r.name;
+    case 'time':
+      return r.sheet?.durationMin ?? null;
+    case 'cost':
+      return r.result?.totalCostCents ?? null;
+    case 'minimum':
+      return r.result?.minimumCents ?? null;
+    case 'suggested':
+      return r.result && !r.result.error ? r.result.suggestedCents : null;
+    case 'current':
+      return r.currentPriceCents ?? null;
+    case 'margin':
+      return r.result?.currentMarginPct ?? null;
+    case 'health':
+      return healthRank(r);
+  }
+};
+/** Vazios (sem ficha / sem preço) ficam sempre no fim. */
+function sortRows(rows: any[], sort: Sort) {
+  const m = sort.dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const va = sortValue(a, sort.key);
+    const vb = sortValue(b, sort.key);
+    if (va == null && vb == null) return a.name.localeCompare(b.name, 'pt-BR');
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const c = typeof va === 'string' ? va.localeCompare(vb as string, 'pt-BR') : (va as number) - (vb as number);
+    return c === 0 ? a.name.localeCompare(b.name, 'pt-BR') : c * m;
+  });
+}
+
+function SortTH({ label, k, sort, onSort, right }: { label: string; k: SortKey; sort: Sort; onSort: (k: SortKey) => void; right?: boolean }) {
+  const active = sort.key === k;
+  const Icon = !active ? ArrowUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <TH className={right ? 'text-right' : undefined} aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className={cn('inline-flex items-center gap-1 uppercase hover:text-navy-800', right && 'flex-row-reverse', active && 'text-navy-800')}
+        title={active ? (sort.dir === 'asc' ? 'Menor → maior (clique para inverter)' : 'Maior → menor (clique para inverter)') : 'Ordenar do menor para o maior'}
+      >
+        {label}
+        <Icon className={cn('size-3 shrink-0', !active && 'opacity-40')} />
+      </button>
+    </TH>
   );
 }
 
@@ -334,6 +398,9 @@ export default function PricingPage() {
   const [supply, setSupply] = useState<any | null>(null);
   const [supplyOpen, setSupplyOpen] = useState(false);
   const del = useAction();
+  const [sort, setSort] = useState<Sort>({ key: 'name', dir: 'asc' });
+  const onSort = (k: SortKey) => setSort((s) => (s.key === k ? { key: k, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' }));
+  const sortedRows = useMemo(() => (data ? sortRows(data.rows, sort) : []), [data, sort]);
 
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!data) return <p className="text-sm text-muted-foreground">Carregando…</p>;
@@ -382,19 +449,19 @@ export default function PricingPage() {
               <Table>
                 <THead>
                   <TR>
-                    <TH>Procedimento</TH>
-                    <TH className="text-right">Tempo</TH>
-                    <TH className="text-right">Custo da sessão</TH>
-                    <TH className="text-right">Preço mínimo</TH>
-                    <TH className="text-right">Preço sugerido</TH>
-                    <TH className="text-right">Preço atual</TH>
-                    <TH className="text-right">Margem atual</TH>
-                    <TH>Situação</TH>
+                    <SortTH label="Procedimento" k="name" sort={sort} onSort={onSort} />
+                    <SortTH label="Tempo" k="time" sort={sort} onSort={onSort} right />
+                    <SortTH label="Custo da sessão" k="cost" sort={sort} onSort={onSort} right />
+                    <SortTH label="Preço mínimo" k="minimum" sort={sort} onSort={onSort} right />
+                    <SortTH label="Preço sugerido" k="suggested" sort={sort} onSort={onSort} right />
+                    <SortTH label="Preço atual" k="current" sort={sort} onSort={onSort} right />
+                    <SortTH label="Margem atual" k="margin" sort={sort} onSort={onSort} right />
+                    <SortTH label="Situação" k="health" sort={sort} onSort={onSort} />
                     <TH />
                   </TR>
                 </THead>
                 <TBody>
-                  {rows.map((r) => (
+                  {sortedRows.map((r) => (
                     <TR key={r.procedureId} className="cursor-pointer hover:bg-secondary/50" onClick={() => setEditing(r)}>
                       <TD className="font-medium">
                         {r.name}
