@@ -429,9 +429,11 @@ function MetaPanel() {
             </Button>
           </div>
           {diag?.map((d) => (
-            <p key={d.name} className="flex items-center gap-2 text-sm">
-              {d.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-red-600" />}
-              {d.name}: <span className="text-muted-foreground">{d.detail}</span>
+            <p key={d.name} className="flex items-start gap-2 text-sm">
+              {d.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />}
+              <span>
+                {d.name}: <span className="break-words text-muted-foreground">{d.detail}</span>
+              </span>
             </p>
           ))}
         </CardContent>
