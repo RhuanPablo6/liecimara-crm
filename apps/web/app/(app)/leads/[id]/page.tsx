@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Bell, CalendarPlus, CheckCircle2, CircleDollarSign, Link2, Megaphone, MessageCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, Bell, CalendarPlus, CheckCircle2, CircleDollarSign, Link2, Megaphone, MessageCircle, Trash2, Undo2, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { use, useState } from 'react';
 import { ConfidenceBadge, LOST_REASONS, StageBadge, STAGES } from '@/components/badges';
@@ -15,6 +15,7 @@ import { ORGANIC_ORIGINS, ORIGIN_LABEL, ORIGIN_NOTE_HINT } from '@/lib/origins';
 import { PatientTagControl } from '@/components/patient-tag';
 import { brl, date, dateTime, parseBRL, phone } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { ConfirmButton } from '@/components/confirm-button';
 
 const METHODS = [
   ['PIX', 'Pix'],
@@ -535,6 +536,17 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       {procName(a.procedureId)} · {a.status === 'CANCELED' ? `Cancelado: ${a.cancelReason}` : (APPT_LABEL[a.status] ?? a.status)}
                     </p>
                   </div>
+                  {a.status !== 'SCHEDULED' && (
+                    <ConfirmButton
+                      size="sm"
+                      variant="ghost"
+                      confirmLabel="Voltar para “a confirmar”?"
+                      title="Desfazer o último status (clique errado)"
+                      onConfirm={() => call(() => api(`/appointments/${a.id}/reopen`, { method: 'POST' }))}
+                    >
+                      <Undo2 /> Corrigir
+                    </ConfirmButton>
+                  )}
                   {(a.status === 'SCHEDULED' || a.status === 'CONFIRMED') && (
                     <div className="flex gap-1">
                       {a.status === 'SCHEDULED' && (
@@ -567,7 +579,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               {sales.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma venda registrada.</p>}
               {sales.map((s: any) => {
                 const balance = s.amountCents - s.paidCents;
-                const done = performed.some((p: any) => p.saleId === s.id);
+                const doneRow = performed.find((p: any) => p.saleId === s.id);
+                const done = !!doneRow;
                 return (
                   <div key={s.id} className={cn('rounded-md border p-3', s.status === 'CANCELED' && 'opacity-50')}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -579,6 +592,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                           {date(s.soldAt)} · pago {brl(s.paidCents)} · <ConfidenceBadge value={s.attributionConfidence} />
                         </p>
                       </div>
+                      {s.status === 'CANCELED' && (
+                        <ConfirmButton size="sm" variant="outline" confirmLabel="Reativar a venda?" onConfirm={() => call(() => api(`/sales/${s.id}/reactivate`, { method: 'POST' }))}>
+                          <Undo2 /> Desfazer cancelamento
+                        </ConfirmButton>
+                      )}
                       {s.status === 'ACTIVE' && (
                         <div className="flex gap-1">
                           {balance > 0 && (
@@ -607,9 +625,14 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                             </ActionDialog>
                           )}
                           {!done && (
-                            <Button size="sm" variant="outline" onClick={() => call(() => api(`/leads/${id}/procedures-performed`, { method: 'POST', body: { procedureId: s.procedureId, saleId: s.id } }))}>
+                            <ConfirmButton
+                              size="sm"
+                              variant="outline"
+                              confirmLabel="Confirmar: já realizou?"
+                              onConfirm={() => call(() => api(`/leads/${id}/procedures-performed`, { method: 'POST', body: { procedureId: s.procedureId, saleId: s.id } }))}
+                            >
                               <CheckCircle2 /> Realizado
-                            </Button>
+                            </ConfirmButton>
                           )}
                         </div>
                       )}
@@ -617,14 +640,39 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     {s.payments.length > 0 && (
                       <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
                         {s.payments.map((p: any) => (
-                          <li key={p.id}>
-                            {date(p.paidAt)} · {METHODS.find((m) => m[0] === p.method)?.[1] ?? p.method} · {brl(p.amountCents)}
-                            {p.installments > 1 && ` em ${p.installments}x`}
+                          <li key={p.id} className="flex items-center gap-2">
+                            <span>
+                              {date(p.paidAt)} · {METHODS.find((m) => m[0] === p.method)?.[1] ?? p.method} · {brl(p.amountCents)}
+                              {p.installments > 1 && ` em ${p.installments}x`}
+                            </span>
+                            <ConfirmButton
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-1.5 text-xs"
+                              confirmLabel="Excluir este pagamento?"
+                              title="Excluir pagamento lançado errado"
+                              onConfirm={() => call(() => api(`/payments/${p.id}`, { method: 'DELETE' }))}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </ConfirmButton>
                           </li>
                         ))}
                       </ul>
                     )}
-                    {done && <p className="mt-1 text-xs text-emerald-700">Procedimento realizado</p>}
+                    {done && (
+                      <div className="mt-1 flex items-center gap-2 text-xs text-emerald-700">
+                        <span>Procedimento realizado em {date(doneRow.performedAt)}</span>
+                        <ConfirmButton
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 px-1.5 text-xs text-muted-foreground"
+                          confirmLabel="Desmarcar realizado?"
+                          onConfirm={() => call(() => api(`/procedures-performed/${doneRow.id}`, { method: 'DELETE' }))}
+                        >
+                          <Undo2 className="size-3.5" /> Desfazer
+                        </ConfirmButton>
+                      </div>
+                    )}
                   </div>
                 );
               })}

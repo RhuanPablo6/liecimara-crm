@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, Lock, LockOpen, Plus, UserCheck, UserX } from 'lucide-react';
+import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, Lock, LockOpen, Plus, Undo2, UserCheck, UserX } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageButton } from '@/components/message-button';
@@ -12,6 +12,7 @@ import { api, useAction, useApi } from '@/lib/api';
 import { phone } from '@/lib/format';
 import { ORGANIC_ORIGINS } from '@/lib/origins';
 import { cn } from '@/lib/utils';
+import { ConfirmButton } from '@/components/confirm-button';
 
 type View = 'day' | 'week' | 'month';
 
@@ -564,6 +565,25 @@ function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt;
         {a.notes && !editing && <p className="rounded-md bg-secondary/60 px-3 py-2">{a.notes}</p>}
       </div>
 
+      {a.status !== 'SCHEDULED' && !editing && !canceling && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm">
+          <span className="text-muted-foreground">Clicou errado?</span>
+          <ConfirmButton
+            size="sm"
+            variant="outline"
+            disabled={busy}
+            confirmLabel="Voltar para “a confirmar”?"
+            onConfirm={() =>
+              run(async () => {
+                await api(`/appointments/${a.id}/reopen`, { method: 'POST' });
+                onDone(true);
+              })
+            }
+          >
+            <Undo2 /> Desfazer “{st.label}”
+          </ConfirmButton>
+        </div>
+      )}
       {open && !editing && !canceling && (
         <div className="flex flex-wrap gap-2">
           {a.status === 'SCHEDULED' && (

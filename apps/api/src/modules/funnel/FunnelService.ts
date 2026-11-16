@@ -431,6 +431,76 @@ export class FunnelService {
     });
   }
 
+  // ── Correções (desfazer cliques errados) ──────────────────
+
+  /** Desmarca "procedimento realizado". */
+  async undoProcedurePerformed(performedId: string, reason: string | null, actor: Actor) {
+    return this.repos.tx(async (r) => {
+      const row = await r.performed.findById(performedId);
+      if (!row) throw new NotFoundError('Procedimento realizado', performedId);
+      await r.performed.delete(performedId);
+      await r.audit.log({ userId: actor.id, action: 'procedure.performed.undo', entityType: 'ProcedurePerformed', entityId: performedId, before: row, after: { reason }, ip: actor.ip });
+      await r.leads.update(row.leadId, { lastActivityAt: this.clock.now() });
+      return { ok: true, leadId: row.leadId };
+    });
+  }
+
+  /** Exclui um pagamento lançado errado (valor, forma ou paciente). */
+  async deletePayment(paymentId: string, reason: string | null, actor: Actor) {
+    return this.repos.tx(async (r) => {
+      const p = await r.payments.findById(paymentId);
+      if (!p) throw new NotFoundError('Pagamento', paymentId);
+      await r.payments.delete(paymentId);
+      await r.audit.log({ userId: actor.id, action: 'payment.delete', entityType: 'Payment', entityId: paymentId, before: p, after: { reason }, ip: actor.ip });
+      return { ok: true, saleId: p.saleId };
+    });
+  }
+
+  /** Desfaz o cancelamento de uma venda. */
+  async reactivateSale(saleId: string, actor: Actor): Promise<Sale> {
+    return this.repos.tx(async (r) => {
+      const sale = await r.sales.findById(saleId);
+      if (!sale) throw new NotFoundError('Venda', saleId);
+      if (sale.status === 'ACTIVE') return sale;
+      const updated = await r.sales.update(saleId, { status: 'ACTIVE' });
+      await r.audit.log({ userId: actor.id, action: 'sale.reactivate', entityType: 'Sale', entityId: saleId, before: { status: sale.status }, after: { status: 'ACTIVE' }, ip: actor.ip });
+      const lead = await this.getLead(r, sale.leadId);
+      if (lead.stage !== 'WON') {
+        await this.transition(r, lead, 'WON', actor, 'cancelamento da venda desfeito', { closedAt: this.clock.now(), lostReason: null, lostNote: null });
+      }
+      return updated;
+    });
+  }
+
+  /**
+   * Volta o agendamento para "a confirmar" (desfaz Confirmou / Compareceu / Faltou / Cancelado)
+   * e acerta a etapa do lead quando ela tinha mudado por causa do clique.
+   */
+  async reopenAppointment(appointmentId: string, actor: Actor): Promise<Appointment> {
+    return this.repos.tx(async (r) => {
+      const appt = await r.appointments.findById(appointmentId);
+      if (!appt) throw new NotFoundError('Agendamento', appointmentId);
+      if (appt.status === 'SCHEDULED') return appt;
+      const updated = await r.appointments.update(appointmentId, { status: 'SCHEDULED', cancelReason: null });
+      await r.audit.log({
+        userId: actor.id,
+        action: 'appointment.reopen',
+        entityType: 'Appointment',
+        entityId: appointmentId,
+        before: { status: appt.status, cancelReason: appt.cancelReason },
+        after: { status: 'SCHEDULED' },
+        ip: actor.ip,
+      });
+      const lead = await this.getLead(r, appt.leadId);
+      const others = (await r.appointments.listByLead(appt.leadId)).filter((a) => a.id !== appointmentId);
+      const attendedElsewhere = others.some((a) => a.status === 'ATTENDED');
+      if ((lead.stage === 'ATTENDED' && !attendedElsewhere) || lead.stage === 'CONTACTED' || lead.stage === 'NEW') {
+        await this.transition(r, lead, 'SCHEDULED', actor, 'status do agendamento corrigido');
+      }
+      return updated;
+    });
+  }
+
   // ── Atribuição manual ─────────────────────────────────────
 
   async attributeManually(leadId: string, adMetaId: string, note: string, actor: Actor): Promise<Lead> {

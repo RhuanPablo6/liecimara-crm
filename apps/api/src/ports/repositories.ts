@@ -166,6 +166,8 @@ export interface PaymentRepo {
   create(data: Create<Payment>): Promise<Payment>;
   listBySale(saleId: string): Promise<Payment[]>;
   listPaidIn(range: DateRange): Promise<Payment[]>;
+  findById(id: string): Promise<Payment | null>;
+  delete(id: string): Promise<void>;
 }
 
 export interface SupplyPurchaseRepo {
@@ -190,6 +192,8 @@ export interface ProcedurePerformedRepo {
   create(data: Create<ProcedurePerformed>): Promise<ProcedurePerformed>;
   listByLead(leadId: string): Promise<ProcedurePerformed[]>;
   listPerformedIn(range: DateRange): Promise<ProcedurePerformed[]>;
+  findById(id: string): Promise<ProcedurePerformed | null>;
+  delete(id: string): Promise<void>;
 }
 
 export interface ReminderRepo {

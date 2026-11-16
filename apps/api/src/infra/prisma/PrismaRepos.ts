@@ -349,6 +349,8 @@ export class PrismaRepos implements Repos {
     create: async (d: any) => as<any>(await this.db.payment.create({ data: d })),
     listBySale: async (saleId: string) => as<any>(await this.db.payment.findMany({ where: { saleId }, orderBy: { paidAt: 'asc' } })),
     listPaidIn: async (r: DateRange) => as<any>(await this.db.payment.findMany({ where: { paidAt: inRange(r) } })),
+    findById: async (id: string) => as<any>(await this.db.payment.findUnique({ where: { id } })),
+    delete: async (id: string) => void (await this.db.payment.delete({ where: { id } })),
   };
 
   purchases = {
@@ -430,6 +432,8 @@ export class PrismaRepos implements Repos {
     create: async (d: any) => as<any>(await this.db.procedurePerformed.create({ data: d })),
     listByLead: async (leadId: string) => as<any>(await this.db.procedurePerformed.findMany({ where: { leadId } })),
     listPerformedIn: async (r: DateRange) => as<any>(await this.db.procedurePerformed.findMany({ where: { performedAt: inRange(r) } })),
+    findById: async (id: string) => as<any>(await this.db.procedurePerformed.findUnique({ where: { id } })),
+    delete: async (id: string) => void (await this.db.procedurePerformed.delete({ where: { id } })),
   };
 
   reminders = {

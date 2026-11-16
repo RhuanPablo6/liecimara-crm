@@ -344,6 +344,10 @@ export class MemoryRepos implements Repos {
     create: async (d: Omit<Payment, 'id'>) => insert(this.s.payments, d, 'pay_'),
     listBySale: async (saleId: string) => clone([...this.s.payments.values()].filter((p) => p.saleId === saleId)),
     listPaidIn: async (r: DateRange) => clone([...this.s.payments.values()].filter((p) => inRange(p.paidAt, r))),
+    findById: async (id: string) => clone(this.s.payments.get(id) ?? null),
+    delete: async (id: string) => {
+      if (!this.s.payments.delete(id)) throw new NotFoundError('Pagamento', id);
+    },
   };
 
   purchases = {
@@ -420,6 +424,10 @@ export class MemoryRepos implements Repos {
     create: async (d: Omit<ProcedurePerformed, 'id'>) => insert(this.s.performed, d, 'prf_'),
     listByLead: async (leadId: string) => clone([...this.s.performed.values()].filter((p) => p.leadId === leadId)),
     listPerformedIn: async (r: DateRange) => clone([...this.s.performed.values()].filter((p) => inRange(p.performedAt, r))),
+    findById: async (id: string) => clone(this.s.performed.get(id) ?? null),
+    delete: async (id: string) => {
+      if (!this.s.performed.delete(id)) throw new NotFoundError('Procedimento realizado', id);
+    },
   };
 
   reminders = {

@@ -308,6 +308,28 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
     return c.funnel.markProcedurePerformed(leadId, b, actorOf(req));
   });
 
+  // ---------- Correções de cliques errados ----------
+
+  app.delete('/procedures-performed/:id', { preHandler: guard('leads:write') }, async (req) => {
+    const p = id.parse(req.params);
+    return c.funnel.undoProcedurePerformed(p.id, null, actorOf(req));
+  });
+
+  app.delete('/payments/:id', { preHandler: guard('payments:write') }, async (req) => {
+    const p = id.parse(req.params);
+    return c.funnel.deletePayment(p.id, null, actorOf(req));
+  });
+
+  app.post('/sales/:id/reactivate', { preHandler: guard('sales:write') }, async (req) => {
+    const p = id.parse(req.params);
+    return c.funnel.reactivateSale(p.id, actorOf(req));
+  });
+
+  app.post('/appointments/:id/reopen', { preHandler: guard('leads:write') }, async (req) => {
+    const p = id.parse(req.params);
+    return c.funnel.reopenAppointment(p.id, actorOf(req));
+  });
+
   app.post('/leads/:id/reminders', { preHandler: guard('leads:write') }, async (req) => {
     const { id: leadId } = id.parse(req.params);
     const b = z.object({ dueAt: isoDate, note: z.string().min(2), assignedToId: z.string().nullish() }).parse(req.body);
