@@ -195,6 +195,17 @@ export interface Procedure {
   returnDays?: number | null;
 }
 
+export interface AgendaBlock {
+  id: string;
+  startAt: Date;
+  endAt: Date;
+  allDay: boolean;
+  reason: string;
+  note: string | null;
+  createdById: string | null;
+  createdAt: Date;
+}
+
 export interface RecallAction {
   id: string;
   contactId: string;

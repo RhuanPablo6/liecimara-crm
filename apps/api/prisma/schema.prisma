@@ -621,3 +621,18 @@ model RecallAction {
   @@index([contactId])
   @@map("recall_actions")
 }
+
+/// Período em que a agenda da doutora está fechada (férias, congresso...).
+model AgendaBlock {
+  id          String   @id @default(cuid())
+  startAt     DateTime
+  endAt       DateTime
+  allDay      Boolean  @default(true)
+  reason      String
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([startAt, endAt])
+  @@map("agenda_blocks")
+}

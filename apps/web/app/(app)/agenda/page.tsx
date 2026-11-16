@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, Plus, UserCheck, UserX } from 'lucide-react';
+import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, Lock, LockOpen, Plus, UserCheck, UserX } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageButton } from '@/components/message-button';
@@ -64,6 +64,226 @@ type Appt = {
   patientNote: string | null;
 };
 
+type Block = { id: string; startAt: string; endAt: string; allDay: boolean; reason: string; note: string | null };
+
+const BLOCK_REASONS = ['Férias', 'Congresso / curso', 'Compromisso pessoal', 'Consulta médica', 'Feriado', 'Outro'];
+const BLOCK_STYLE = {
+  backgroundImage: 'repeating-linear-gradient(135deg, rgba(100,116,139,0.16) 0 6px, rgba(100,116,139,0.05) 6px 12px)',
+};
+
+/** Trechos do dia (em minutos de São Paulo) cobertos por cada bloqueio. */
+function blockSegments(blocks: Block[], day: string) {
+  const dayStart = new Date(`${day}T00:00:00-03:00`).getTime();
+  const out: { b: Block; start: number; end: number }[] = [];
+  for (const b of blocks) {
+    const s = Math.max(new Date(b.startAt).getTime(), dayStart);
+    const e = Math.min(new Date(b.endAt).getTime(), dayStart + 86_400_000);
+    if (e > s) out.push({ b, start: (s - dayStart) / 60_000, end: (e - dayStart) / 60_000 });
+  }
+  return out;
+}
+
+const blockedAt = (blocks: Block[], day: string, start: number, dur: number) =>
+  blockSegments(blocks, day).filter((x) => x.start < start + dur && start < x.end).map((x) => x.b);
+
+const blockLabel = (b: Block) => `${b.reason}${b.note ? ` · ${b.note}` : ''}`;
+
+/** "20/12 a 30/12" ou "18/11, 13:00–17:00". */
+function blockPeriod(b: Block) {
+  const d = (iso: string) => label(spDayOf(iso), { day: '2-digit', month: '2-digit' });
+  if (b.allDay) {
+    const last = spDayOf(new Date(new Date(b.endAt).getTime() - 60_000).toISOString());
+    const first = spDayOf(b.startAt);
+    return first === last ? `${label(first, { weekday: 'short', day: '2-digit', month: '2-digit' })} (dia todo)` : `${d(b.startAt)} a ${label(last, { day: '2-digit', month: '2-digit' })}`;
+  }
+  return `${label(spDayOf(b.startAt), { weekday: 'short', day: '2-digit', month: '2-digit' })}, ${hhmm(spMinutes(b.startAt))}–${hhmm(spMinutes(b.endAt))}`;
+}
+
+function BlockedNotice({ blocks, force, setForce }: { blocks: Block[]; force: boolean; setForce: (v: boolean) => void }) {
+  if (!blocks.length) return null;
+  return (
+    <div className="space-y-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-900">
+      <p className="flex items-center gap-1.5 font-medium">
+        <Lock className="size-4" /> Agenda fechada neste horário: {blocks.map(blockLabel).join(', ')}
+      </p>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" className="size-4 accent-red-700" checked={force} onChange={(e) => setForce(e.target.checked)} />
+        Encaixar mesmo assim (a doutora autorizou)
+      </label>
+    </div>
+  );
+}
+
+// ── Fechar agenda ─────────────────────────────────────────────
+
+function CloseAgendaDialog({ initDay, onDone }: { initDay: string; onDone: (changed: boolean) => void }) {
+  const [allDay, setAllDay] = useState(true);
+  const [startDay, setStartDay] = useState(initDay);
+  const [endDay, setEndDay] = useState(initDay);
+  const [startTime, setStartTime] = useState('13:00');
+  const [endTime, setEndTime] = useState('18:00');
+  const [reason, setReason] = useState('Férias');
+  const [note, setNote] = useState('');
+  const [affected, setAffected] = useState<any[] | null>(null);
+  const { busy, error, run } = useAction();
+  const invalid = allDay ? !startDay || !endDay || endDay < startDay : !startDay || endTime <= startTime;
+
+  if (affected) {
+    return (
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Agenda fechada</DialogTitle>
+        </DialogHeader>
+        {affected.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nenhuma paciente estava marcada nesse período.</p>
+        ) : (
+          <div className="space-y-2">
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {affected.length} paciente(s) já estavam marcadas nesse período. Fale com elas para remarcar:
+            </p>
+            <div className="divide-y rounded-md border">
+              {affected.map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                  <span>
+                    <b>{a.name ?? phone(a.waId)}</b>{' '}
+                    <span className="text-muted-foreground">
+                      · {new Date(a.scheduledFor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </span>
+                  <MessageButton waId={a.waId} use="GENERAL" label="Falar" vars={{ nome: a.name }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <Button onClick={() => onDone(true)}>Concluir</Button>
+      </DialogContent>
+    );
+  }
+
+  return (
+    <DialogContent className="max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Fechar agenda</DialogTitle>
+      </DialogHeader>
+      <p className="text-sm text-muted-foreground">O período fica bloqueado na Agenda e não dá para marcar pacientes nele (só como encaixe autorizado).</p>
+      <div className="inline-flex w-fit rounded-lg bg-secondary p-1">
+        {(
+          [
+            [true, 'Dia(s) inteiro(s)'],
+            [false, 'Só um horário'],
+          ] as const
+        ).map(([k, l]) => (
+          <button
+            key={String(k)}
+            onClick={() => setAllDay(k)}
+            className={cn('rounded-md px-3 py-1 text-sm font-medium', allDay === k ? 'bg-background text-navy-800 shadow' : 'text-muted-foreground')}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      {allDay ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="De">
+            <Input
+              type="date"
+              value={startDay}
+              onChange={(e) => {
+                setStartDay(e.target.value);
+                if (endDay < e.target.value) setEndDay(e.target.value);
+              }}
+            />
+          </Field>
+          <Field label="Até (inclusive)">
+            <Input type="date" min={startDay} value={endDay} onChange={(e) => setEndDay(e.target.value)} />
+          </Field>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Dia">
+            <Input type="date" value={startDay} onChange={(e) => setStartDay(e.target.value)} />
+          </Field>
+          <Field label="Das">
+            <NativeSelect value={startTime} onChange={(e) => setStartTime(e.target.value)}>
+              {TIMES.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </NativeSelect>
+          </Field>
+          <Field label="Até">
+            <NativeSelect value={endTime} onChange={(e) => setEndTime(e.target.value)}>
+              {TIMES.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </NativeSelect>
+          </Field>
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Motivo">
+          <NativeSelect value={reason} onChange={(e) => setReason(e.target.value)}>
+            {BLOCK_REASONS.map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field label={reason === 'Outro' ? 'Qual motivo?' : 'Detalhe (opcional)'}>
+          <Input placeholder="ex.: Congresso em São Paulo" value={note} onChange={(e) => setNote(e.target.value)} />
+        </Field>
+      </div>
+      <ErrorText>{error}</ErrorText>
+      <Button
+        disabled={busy || invalid || (reason === 'Outro' && note.trim().length < 2)}
+        onClick={() =>
+          run(async () => {
+            const res = await api<{ affected: any[] }>('/agenda/blocks', {
+              method: 'POST',
+              body: allDay
+                ? { allDay, startDay, endDay, reason: reason === 'Outro' ? note.trim() : reason, note: reason === 'Outro' ? null : note.trim() || null }
+                : { allDay, startDay, startTime, endTime, reason: reason === 'Outro' ? note.trim() : reason, note: reason === 'Outro' ? null : note.trim() || null },
+            });
+            setAffected(res.affected);
+          })
+        }
+      >
+        <Lock /> Fechar agenda
+      </Button>
+    </DialogContent>
+  );
+}
+
+function BlockDetails({ b, onDone }: { b: Block; onDone: (changed: boolean) => void }) {
+  const { busy, error, run } = useAction();
+  return (
+    <DialogContent className="max-w-sm">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <Lock className="size-4" /> Agenda fechada
+        </DialogTitle>
+      </DialogHeader>
+      <div className="space-y-1 text-sm">
+        <p className="font-medium">{b.reason}</p>
+        {b.note && <p className="text-muted-foreground">{b.note}</p>}
+        <p>{blockPeriod(b)}</p>
+      </div>
+      <ErrorText>{error}</ErrorText>
+      <Button
+        variant="outline"
+        disabled={busy}
+        onClick={() =>
+          run(async () => {
+            await api(`/agenda/blocks/${b.id}`, { method: 'DELETE' });
+            onDone(true);
+          })
+        }
+      >
+        <LockOpen /> Reabrir este período
+      </Button>
+    </DialogContent>
+  );
+}
+
 const RESPONSE: Record<string, string> = { CONFIRMED: 'Confirmou pelo link', CANCELED: 'Desmarcou pelo link', RESCHEDULE: 'Pediu para remarcar' };
 
 /** Agendamentos que se sobrepõem ficam lado a lado. */
@@ -104,10 +324,12 @@ const overlaps = (list: Appt[], day: string, start: number, dur: number, ignoreI
 function NewAppointment({
   init,
   appts,
+  blocks,
   procedures,
   onDone,
 }: {
   init: { day: string; time: string; leadId?: string; name?: string };
+  blocks: Block[];
   appts: Appt[];
   procedures: any[];
   onDone: (created: boolean) => void;
@@ -136,7 +358,9 @@ function NewAppointment({
 
   const [h, m] = time.split(':').map(Number);
   const clash = overlaps(appts, day, h! * 60 + m!, Number(duration));
-  const ready = (mode === 'existing' ? !!picked?.leadId : waId.length >= 12) && !!day && !!time;
+  const blocked = blockedAt(blocks, day, h! * 60 + m!, Number(duration));
+  const [force, setForce] = useState(false);
+  const ready = (mode === 'existing' ? !!picked?.leadId : waId.length >= 12) && !!day && !!time && (!blocked.length || force);
 
   return (
     <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto">
@@ -262,6 +486,7 @@ function NewAppointment({
           Já existe agendamento nesse horário: {clash.map((c) => `${hhmm(spMinutes(c.scheduledFor))} ${c.name ?? ''}`).join(', ')}. Dá para marcar mesmo assim.
         </p>
       )}
+      <BlockedNotice blocks={blocked} force={force} setForce={setForce} />
       <ErrorText>{error}</ErrorText>
       <Button
         disabled={busy || !ready}
@@ -275,6 +500,7 @@ function NewAppointment({
                 scheduledFor: toInstant(day, time),
                 durationMin: Number(duration),
                 notes: notes || null,
+                ignoreBlock: blocked.length > 0 && force,
               },
             });
             onDone(true);
@@ -289,7 +515,7 @@ function NewAppointment({
 
 // ── Detalhes / ações ──────────────────────────────────────────
 
-function AppointmentDetails({ a, appts, procedures, onDone }: { a: Appt; appts: Appt[]; procedures: any[]; onDone: (changed: boolean) => void }) {
+function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt; appts: Appt[]; blocks: Block[]; procedures: any[]; onDone: (changed: boolean) => void }) {
   const [editing, setEditing] = useState(false);
   const [day, setDay] = useState(spDayOf(a.scheduledFor));
   const [time, setTime] = useState(hhmm(spMinutes(a.scheduledFor)));
@@ -304,6 +530,9 @@ function AppointmentDetails({ a, appts, procedures, onDone }: { a: Appt; appts: 
   const open = a.status === 'SCHEDULED' || a.status === 'CONFIRMED';
   const [h, m] = time.split(':').map(Number);
   const clash = editing ? overlaps(appts, day, h! * 60 + m!, Number(duration), a.id) : [];
+  const moved = day !== spDayOf(a.scheduledFor) || time !== hhmm(start) || Number(duration) !== a.durationMin;
+  const blocked = editing && moved ? blockedAt(blocks, day, h! * 60 + m!, Number(duration)) : [];
+  const [force, setForce] = useState(false);
 
   const setStatus = (status: 'CONFIRMED' | 'ATTENDED' | 'NO_SHOW') =>
     run(async () => {
@@ -407,14 +636,15 @@ function AppointmentDetails({ a, appts, procedures, onDone }: { a: Appt; appts: 
               Conflito com: {clash.map((c) => `${hhmm(spMinutes(c.scheduledFor))} ${c.name ?? ''}`).join(', ')}.
             </p>
           )}
+          <BlockedNotice blocks={blocked} force={force} setForce={setForce} />
           <div className="flex gap-2">
             <Button
-              disabled={busy}
+              disabled={busy || (blocked.length > 0 && !force)}
               onClick={() =>
                 run(async () => {
                   await api(`/appointments/${a.id}`, {
                     method: 'PATCH',
-                    body: { scheduledFor: toInstant(day, time), durationMin: Number(duration), procedureId: procedureId || null, notes: notes || null },
+                    body: { scheduledFor: toInstant(day, time), durationMin: Number(duration), procedureId: procedureId || null, notes: notes || null, ignoreBlock: blocked.length > 0 && force },
                   });
                   onDone(true);
                 })
@@ -478,6 +708,8 @@ export default function AgendaPage() {
   const [sunday, setSunday] = useState(false);
   const [creating, setCreating] = useState<{ day: string; time: string; leadId?: string; name?: string } | null>(null);
   const [selected, setSelected] = useState<Appt | null>(null);
+  const [closing, setClosing] = useState(false);
+  const [selBlock, setSelBlock] = useState<Block | null>(null);
   const [now, setNow] = useState(Date.now());
   const scroller = useRef<HTMLDivElement>(null);
   const { data: procedures } = useApi<any[]>('/procedures');
@@ -506,6 +738,9 @@ export default function AgendaPage() {
   const to = addDays(view === 'week' ? addDays(mondayOf(anchor), 6) : days.at(-1)!, 1);
   const { data, error, reload } = useApi<Appt[]>(`/agenda?from=${toInstant(from, '00:00')}&to=${toInstant(to, '00:00')}`);
   const { data: responses, reload: reloadResponses } = useApi<any[]>('/agenda/responses');
+  const { data: blocksData, reload: reloadBlocks } = useApi<Block[]>(`/agenda/blocks?from=${toInstant(from, '00:00')}&to=${toInstant(to, '00:00')}`);
+  const { data: upcoming, reload: reloadUpcoming } = useApi<Block[]>('/agenda/blocks/upcoming');
+  const blocks = blocksData ?? [];
   // As pacientes respondem pelo link a qualquer momento: atualiza sozinho a cada minuto e ao voltar para a aba.
   useEffect(() => {
     const refresh = () => (void reload(), void reloadResponses());
@@ -537,7 +772,9 @@ export default function AgendaPage() {
   const close = (changed: boolean) => {
     setCreating(null);
     setSelected(null);
-    if (changed) (void reload(), void reloadResponses());
+    setClosing(false);
+    setSelBlock(null);
+    if (changed) (void reload(), void reloadResponses(), void reloadBlocks(), void reloadUpcoming());
   };
   const counts = {
     total: appts.filter((a) => a.status !== 'CANCELED').length,
@@ -553,9 +790,14 @@ export default function AgendaPage() {
             {counts.total} agendamento(s) no período{counts.toConfirm ? ` · ${counts.toConfirm} a confirmar` : ''}. Clique num horário livre para marcar.
           </p>
         </div>
-        <Button variant="gold" onClick={() => setCreating({ day: anchor < today ? today : anchor, time: '09:00' })}>
-          <Plus /> Novo agendamento
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setClosing(true)}>
+            <Lock /> Fechar agenda
+          </Button>
+          <Button variant="gold" onClick={() => setCreating({ day: anchor < today ? today : anchor, time: '09:00' })}>
+            <Plus /> Novo agendamento
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -600,6 +842,19 @@ export default function AgendaPage() {
         </div>
       </div>
       <ErrorText>{error}</ErrorText>
+
+      {upcoming && upcoming.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="flex items-center gap-1 text-muted-foreground">
+            <Lock className="size-3.5" /> Agenda fechada:
+          </span>
+          {upcoming.slice(0, 6).map((b) => (
+            <button key={b.id} onClick={() => setSelBlock(b)} className="rounded-full border bg-slate-100 px-2.5 py-0.5 text-xs text-slate-700 hover:bg-slate-200">
+              {blockPeriod(b)} · {blockLabel(b)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {responses && responses.length > 0 && (
         <div className="rounded-lg border bg-background">
@@ -659,7 +914,15 @@ export default function AgendaPage() {
               >
                 <p className="text-xs uppercase text-muted-foreground">{label(d, { weekday: 'short' }).replace('.', '')}</p>
                 <p className={cn('text-lg font-semibold', d === today ? 'text-gold-700' : 'text-navy-800')}>{label(d, { day: 'numeric' })}</p>
-                <p className="text-[11px] text-muted-foreground">{(byDay.get(d) ?? []).filter((a) => a.status !== 'CANCELED').length || ''}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {blockSegments(blocks, d).some((x) => x.b.allDay) ? (
+                    <span className="inline-flex items-center gap-0.5 text-slate-600">
+                      <Lock className="size-3" /> Fechada
+                    </span>
+                  ) : (
+                    (byDay.get(d) ?? []).filter((a) => a.status !== 'CANCELED').length || ''
+                  )}
+                </p>
               </button>
             ))}
           </div>
@@ -685,6 +948,25 @@ export default function AgendaPage() {
                       style={{ top: (i * HOUR_PX) / 2, height: HOUR_PX / 2 }}
                     />
                   ))}
+                  {blockSegments(blocks, d).map(({ b, start, end }) => {
+                    const s = Math.max(start, START_HOUR * 60);
+                    const e = Math.min(end, END_HOUR * 60);
+                    if (e <= s) return null;
+                    return (
+                      <button
+                        key={b.id}
+                        onClick={() => setSelBlock(b)}
+                        className="absolute inset-x-0 z-[5] flex flex-col items-start justify-start border-y border-slate-300 px-1.5 py-1 text-left text-xs text-slate-700"
+                        style={{ ...BLOCK_STYLE, top: ((s - START_HOUR * 60) / 60) * HOUR_PX, height: ((e - s) / 60) * HOUR_PX }}
+                        title={`Agenda fechada: ${blockLabel(b)}`}
+                      >
+                        <span className="inline-flex max-w-full items-center gap-1 truncate rounded bg-white/80 px-1 font-medium">
+                          <Lock className="size-3 shrink-0" /> {b.reason}
+                        </span>
+                        {b.note && <span className="mt-0.5 max-w-full truncate rounded bg-white/80 px-1">{b.note}</span>}
+                      </button>
+                    );
+                  })}
                   {d === today && nowMin >= START_HOUR * 60 && nowMin <= END_HOUR * 60 && (
                     <div className="pointer-events-none absolute inset-x-0 z-20 border-t-2 border-red-500" style={{ top: ((nowMin - START_HOUR * 60) / 60) * HOUR_PX }}>
                       <span className="absolute -left-1 -top-[5px] size-2 rounded-full bg-red-500" />
@@ -735,6 +1017,17 @@ export default function AgendaPage() {
                     {label(d, { day: 'numeric' })}
                   </button>
                   <div className="space-y-0.5">
+                    {blockSegments(blocks, d).map(({ b, start, end }) => (
+                      <button
+                        key={b.id}
+                        onClick={() => setSelBlock(b)}
+                        className="flex w-full items-center gap-1 truncate rounded px-1 text-left text-[11px] text-slate-700"
+                        style={BLOCK_STYLE}
+                      >
+                        <Lock className="size-3 shrink-0" />
+                        {b.allDay || (end - start >= 1440) ? b.reason : `${hhmm(start)}–${hhmm(end)} ${b.reason}`}
+                      </button>
+                    ))}
                     {list.slice(0, 3).map((a) => (
                       <button
                         key={a.id}
@@ -763,13 +1056,24 @@ export default function AgendaPage() {
             <span className={cn('inline-block h-3 w-3 rounded-sm border border-l-4', s.block)} /> {s.label}
           </span>
         ))}
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-sm border border-slate-300" style={BLOCK_STYLE} /> Agenda fechada
+        </span>
       </div>
 
       <Dialog open={!!creating} onOpenChange={(v) => !v && setCreating(null)}>
-        {creating && <NewAppointment key={`${creating.day}${creating.time}${creating.leadId}`} init={creating} appts={data ?? []} procedures={procedures ?? []} onDone={close} />}
+        {creating && (
+          <NewAppointment key={`${creating.day}${creating.time}${creating.leadId}`} init={creating} appts={data ?? []} blocks={blocks} procedures={procedures ?? []} onDone={close} />
+        )}
       </Dialog>
       <Dialog open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
-        {selected && <AppointmentDetails key={selected.id} a={selected} appts={data ?? []} procedures={procedures ?? []} onDone={close} />}
+        {selected && <AppointmentDetails key={selected.id} a={selected} appts={data ?? []} blocks={blocks} procedures={procedures ?? []} onDone={close} />}
+      </Dialog>
+      <Dialog open={closing} onOpenChange={(v) => !v && close(true)}>
+        {closing && <CloseAgendaDialog initDay={anchor < today ? today : anchor} onDone={close} />}
+      </Dialog>
+      <Dialog open={!!selBlock} onOpenChange={(v) => !v && setSelBlock(null)}>
+        {selBlock && <BlockDetails key={selBlock.id} b={selBlock} onDone={close} />}
       </Dialog>
     </div>
   );

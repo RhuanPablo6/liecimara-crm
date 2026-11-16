@@ -61,6 +61,7 @@ export function AgendaPatientDialog({ onSaved }: { onSaved?: () => void }) {
   const canSell = !!me?.permissions.includes('sales:write');
   const { data: procedures } = useApi<any[]>(open ? '/procedures' : null);
   const { data: dayAppts } = useApi<any[]>(open && day ? `/agenda?from=${toInstant(day, '00:00')}&to=${toInstant(day, '23:59')}&v=${saved.length}` : null);
+  const { data: dayBlocks } = useApi<any[]>(open && day ? `/agenda/blocks?from=${toInstant(day, '00:00')}&to=${toInstant(day, '23:59')}` : null);
   const { busy, error, run, setError } = useAction();
 
   const start = Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
@@ -69,6 +70,8 @@ export function AgendaPatientDialog({ onSaved }: { onSaved?: () => void }) {
     const s = spMinutes(a.scheduledFor);
     return s < start + Number(duration) && start < s + a.durationMin;
   });
+  const slotStart = new Date(toInstant(day || '2000-01-01', time)).getTime();
+  const blocked = (dayBlocks ?? []).filter((b) => new Date(b.startAt).getTime() < slotStart + Number(duration) * 60_000 && new Date(b.endAt).getTime() > slotStart);
   const phoneOk = waId.length >= 12;
   const amountCents = parseBRL(amount);
   const paidCents = received === 'partial' ? parseBRL(paid) : received === 'full' ? amountCents : 0;
@@ -215,6 +218,12 @@ export function AgendaPatientDialog({ onSaved }: { onSaved?: () => void }) {
             <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
               Já existe agendamento nesse horário:{' '}
               {clash.map((a) => `${a.name ?? 'Paciente'} (${hhmm(spMinutes(a.scheduledFor))})`).join(', ')}. Dá para salvar mesmo assim.
+            </p>
+          )}
+
+          {blocked.length > 0 && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-900">
+              Atenção: a agenda está fechada nesse horário ({blocked.map((b) => b.reason).join(', ')}). Confira a data antes de salvar.
             </p>
           )}
 

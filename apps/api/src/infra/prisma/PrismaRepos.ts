@@ -407,6 +407,14 @@ export class PrismaRepos implements Repos {
       ),
   };
 
+  agendaBlocks = {
+    create: async (d: any) => as<any>(await this.db.agendaBlock.create({ data: d })),
+    listBetween: async (from: Date, to: Date) =>
+      as<any>(await this.db.agendaBlock.findMany({ where: { startAt: { lt: to }, endAt: { gt: from } }, orderBy: { startAt: 'asc' } })),
+    findById: async (id: string) => as<any>(await this.db.agendaBlock.findUnique({ where: { id } })),
+    delete: async (id: string) => void (await this.db.agendaBlock.delete({ where: { id } })),
+  };
+
   recalls = {
     create: async (d: any) => as<any>(await this.db.recallAction.create({ data: d })),
     list: async () => as<any>(await this.db.recallAction.findMany({ orderBy: { createdAt: 'asc' } })),

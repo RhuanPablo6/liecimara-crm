@@ -25,6 +25,7 @@ import type {
   Procedure,
   ProcedurePerformed,
   RecallAction,
+  AgendaBlock,
   Reminder,
   Sale,
   SupplyPurchase,
@@ -55,6 +56,7 @@ interface State {
   expenses: Map<string, Expense>;
   settings: Map<string, unknown>;
   recalls: Map<string, RecallAction>;
+  agendaBlocks: Map<string, AgendaBlock>;
   performed: Map<string, ProcedurePerformed>;
   reminders: Map<string, Reminder>;
   connections: Map<string, IntegrationConnection>;
@@ -84,6 +86,7 @@ const emptyState = (): State => ({
   expenses: new Map(),
   settings: new Map(),
   recalls: new Map(),
+  agendaBlocks: new Map(),
   performed: new Map(),
   reminders: new Map(),
   connections: new Map(),
@@ -392,6 +395,20 @@ export class MemoryRepos implements Repos {
   recalls = {
     create: async (d: Omit<RecallAction, 'id' | 'createdAt'>) => insert(this.s.recalls, { ...d, createdAt: new Date() }, 'rca_'),
     list: async () => clone([...this.s.recalls.values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())),
+  };
+
+  agendaBlocks = {
+    create: async (d: Omit<AgendaBlock, 'id' | 'createdAt'>) => insert(this.s.agendaBlocks, { ...d, createdAt: new Date() }, 'blk_'),
+    listBetween: async (from: Date, to: Date) =>
+      clone(
+        [...this.s.agendaBlocks.values()]
+          .filter((b) => b.startAt < to && b.endAt > from)
+          .sort((a, b) => a.startAt.getTime() - b.startAt.getTime()),
+      ),
+    findById: async (id: string) => clone(this.s.agendaBlocks.get(id) ?? null),
+    delete: async (id: string) => {
+      if (!this.s.agendaBlocks.delete(id)) throw new NotFoundError('Bloqueio da agenda', id);
+    },
   };
 
   settings = {

@@ -27,6 +27,7 @@ import type {
   Procedure,
   ProcedurePerformed,
   RecallAction,
+  AgendaBlock,
   Reminder,
   Sale,
   SupplyPurchase,
@@ -233,6 +234,14 @@ export interface RecallActionRepo {
   list(): Promise<RecallAction[]>;
 }
 
+export interface AgendaBlockRepo {
+  create(data: Omit<AgendaBlock, 'id' | 'createdAt'>): Promise<AgendaBlock>;
+  /** Bloqueios que encostam no intervalo [from, to). */
+  listBetween(from: Date, to: Date): Promise<AgendaBlock[]>;
+  findById(id: string): Promise<AgendaBlock | null>;
+  delete(id: string): Promise<void>;
+}
+
 export interface AuditRepo {
   log(entry: AuditEntry): Promise<void>;
   list(filter: { entityType?: string; entityId?: string; limit?: number }): Promise<
@@ -262,6 +271,7 @@ export interface Repos {
   audit: AuditRepo;
   settings: SettingRepo;
   recalls: RecallActionRepo;
+  agendaBlocks: AgendaBlockRepo;
   /** Executa `fn` em transação. */
   tx<T>(fn: (r: Repos) => Promise<T>): Promise<T>;
 }
