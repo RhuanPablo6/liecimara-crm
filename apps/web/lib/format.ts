@@ -30,10 +30,22 @@ export const parseBRL = (v: string): number | null => {
 };
 
 /** Período rápido → { from, to } em ISO. */
-export function presetRange(preset: '7d' | '30d' | '90d' | 'month') {
-  const to = new Date();
-  const from = new Date(to);
-  if (preset === 'month') from.setDate(1), from.setHours(0, 0, 0, 0);
-  else from.setDate(to.getDate() - Number.parseInt(preset));
-  return { from: from.toISOString(), to: to.toISOString() };
+/** Início do dia (00:00 em São Paulo, UTC−3) como instante. */
+const spDayStart = (day: string) => new Date(`${day}T00:00:00-03:00`);
+
+export function presetRange(
+  preset: 'today' | '7d' | '30d' | '90d' | 'month' | 'custom',
+  custom?: { from: string; to: string },
+) {
+  const now = new Date();
+  const today = now.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  if (preset === 'today') return { from: spDayStart(today).toISOString(), to: now.toISOString() };
+  if (preset === 'custom' && custom) {
+    const end = new Date(spDayStart(custom.to).getTime() + 86_400_000);
+    return { from: spDayStart(custom.from).toISOString(), to: (end > now ? now : end).toISOString() };
+  }
+  if (preset === 'month') return { from: spDayStart(`${today.slice(0, 7)}-01`).toISOString(), to: now.toISOString() };
+  const from = new Date(now);
+  from.setDate(now.getDate() - Number.parseInt(preset === 'custom' ? '30' : preset));
+  return { from: from.toISOString(), to: now.toISOString() };
 }

@@ -4,7 +4,7 @@ import { AlertTriangle, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { PeriodPicker, type Preset } from '@/components/period-picker';
+import { defaultCustom, PeriodPicker, type CustomRange, type Preset } from '@/components/period-picker';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { useApi } from '@/lib/api';
@@ -26,7 +26,8 @@ function Kpi({ label, value, hint, accent }: { label: string; value: string; hin
 
 export default function DashboardPage() {
   const [preset, setPreset] = useState<Preset>('30d');
-  const qs = useMemo(() => new URLSearchParams(presetRange(preset)).toString(), [preset]);
+  const [custom, setCustom] = useState<CustomRange>(defaultCustom);
+  const qs = useMemo(() => new URLSearchParams(presetRange(preset, custom)).toString(), [preset, custom]);
   const { data: s } = useApi(`/reports/summary?${qs}`);
   const { data: series } = useApi<any[]>(`/reports/timeseries?${qs}`);
   const { data: ads } = useApi<any[]>(`/reports/ads?${qs}`);
@@ -42,7 +43,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-semibold text-navy-800">Painel</h1>
           <p className="text-sm text-muted-foreground">Leads de anúncios e conversões comerciais</p>
         </div>
-        <PeriodPicker value={preset} onChange={setPreset} />
+        <PeriodPicker value={preset} onChange={setPreset} custom={custom} onCustomChange={setCustom} />
       </div>
 
       {s && (

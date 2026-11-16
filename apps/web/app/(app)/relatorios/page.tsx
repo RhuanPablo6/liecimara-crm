@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { LOST_REASONS, STAGES } from '@/components/badges';
-import { PeriodPicker, type Preset } from '@/components/period-picker';
+import { defaultCustom, PeriodPicker, type CustomRange, type Preset } from '@/components/period-picker';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
@@ -12,7 +12,8 @@ import { brl, num, pct, presetRange, roas } from '@/lib/format';
 
 export default function ReportsPage() {
   const [preset, setPreset] = useState<Preset>('30d');
-  const qs = useMemo(() => new URLSearchParams(presetRange(preset)).toString(), [preset]);
+  const [custom, setCustom] = useState<CustomRange>(defaultCustom);
+  const qs = useMemo(() => new URLSearchParams(presetRange(preset, custom)).toString(), [preset, custom]);
   const { data: ads } = useApi<any[]>(`/reports/ads?${qs}`);
   const { data: campaigns } = useApi<any[]>(`/reports/campaigns?${qs}`);
   const { data: funnel } = useApi(`/reports/funnel?${qs}`);
@@ -22,7 +23,7 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="text-3xl font-semibold text-navy-800">Relatórios</h1>
-        <PeriodPicker value={preset} onChange={setPreset} />
+        <PeriodPicker value={preset} onChange={setPreset} custom={custom} onCustomChange={setCustom} />
       </div>
 
       <Tabs defaultValue="ads">
