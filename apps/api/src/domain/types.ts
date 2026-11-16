@@ -195,6 +195,63 @@ export interface Procedure {
   returnDays?: number | null;
 }
 
+export interface ClinicalForm {
+  id: string;
+  contactId: string;
+  kind: 'ANAMNESIS' | 'CONSENT';
+  title: string;
+  procedureId: string | null;
+  content: any;
+  status: 'PENDING' | 'SIGNED';
+  imageUse: 'NONE' | 'INTERNAL' | 'MARKETING' | null;
+  signerName: string | null;
+  signerDocument: string | null;
+  signature: string | null;
+  signedAt: Date | null;
+  signedIp: string | null;
+  signedUserAgent: string | null;
+  contentHash: string | null;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ClinicalProduct {
+  name: string;
+  lot: string | null;
+  quantity: number | null;
+  unit: string | null;
+}
+
+export interface ClinicalSession {
+  id: string;
+  contactId: string;
+  procedureId: string | null;
+  performedAt: Date;
+  products: ClinicalProduct[];
+  areas: string | null;
+  notes: string | null;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ClinicalPhoto {
+  id: string;
+  contactId: string;
+  sessionId: string | null;
+  takenAt: Date;
+  stage: 'BEFORE' | 'AFTER' | 'FOLLOWUP';
+  angle: string | null;
+  caption: string | null;
+  mime: string;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  createdById: string | null;
+  createdAt: Date;
+}
+
 export interface QuoteItem {
   procedureId: string;
   /** Texto exibido (ex.: "Botox – terço superior, 50 U"). */

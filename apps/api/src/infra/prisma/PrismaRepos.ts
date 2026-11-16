@@ -445,6 +445,56 @@ export class PrismaRepos implements Repos {
     },
   };
 
+  clinical = (() => {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const repo = this; // this.db só existe depois do construtor: acesso tardio
+    const meta = {
+      id: true, contactId: true, sessionId: true, takenAt: true, stage: true, angle: true, caption: true,
+      mime: true, width: true, height: true, sizeBytes: true, createdById: true, createdAt: true,
+    } as const;
+    return {
+      createForm: async (d: any) => as<any>(await repo.db.clinicalForm.create({ data: { ...d, content: json(d.content) } })),
+      updateForm: async (id: string, d: any) =>
+        as<any>(await repo.db.clinicalForm.update({ where: { id }, data: { ...d, ...('content' in d ? { content: json(d.content) } : {}) } })),
+      findForm: async (id: string) => as<any>(await repo.db.clinicalForm.findUnique({ where: { id } })),
+      listForms: async (contactId: string) => as<any>(await repo.db.clinicalForm.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' } })),
+      listRecentForms: async (limit: number) =>
+        as<any>(await repo.db.clinicalForm.findMany({ orderBy: { updatedAt: 'desc' }, take: limit, omit: { signature: true } })),
+      deleteForm: async (id: string) => {
+        await repo.db.clinicalForm.delete({ where: { id } });
+      },
+      createSession: async (d: any) => as<any>(await repo.db.clinicalSession.create({ data: { ...d, products: json(d.products) } })),
+      updateSession: async (id: string, d: any) =>
+        as<any>(await repo.db.clinicalSession.update({ where: { id }, data: { ...d, ...('products' in d ? { products: json(d.products) } : {}) } })),
+      findSession: async (id: string) => as<any>(await repo.db.clinicalSession.findUnique({ where: { id } })),
+      listSessions: async (contactId: string) => as<any>(await repo.db.clinicalSession.findMany({ where: { contactId }, orderBy: { performedAt: 'desc' } })),
+      deleteSession: async (id: string) => {
+        await repo.db.clinicalPhoto.updateMany({ where: { sessionId: id }, data: { sessionId: null } });
+        await repo.db.clinicalSession.delete({ where: { id } });
+      },
+      createPhoto: async (d: any) => as<any>(await repo.db.clinicalPhoto.create({ data: d, select: meta })),
+      updatePhoto: async (id: string, d: any) => as<any>(await repo.db.clinicalPhoto.update({ where: { id }, data: d, select: meta })),
+      findPhoto: async (id: string) => as<any>(await repo.db.clinicalPhoto.findUnique({ where: { id }, select: meta })),
+      photoBytes: async (id: string, variant: 'full' | 'thumb') => {
+        const p = await repo.db.clinicalPhoto.findUnique({
+          where: { id },
+          select: { mime: true, contactId: true, ...(variant === 'full' ? { data: true } : { thumb: true }) },
+        });
+        if (!p) return null;
+        const raw = (variant === 'full' ? (p as any).data : (p as any).thumb) as Uint8Array;
+        return { mime: p.mime, contactId: p.contactId, bytes: Buffer.from(raw) };
+      },
+      listPhotos: async (contactId: string) => as<any>(await repo.db.clinicalPhoto.findMany({ where: { contactId }, orderBy: { takenAt: 'asc' }, select: meta })),
+      deletePhoto: async (id: string) => {
+        await repo.db.clinicalPhoto.delete({ where: { id } });
+      },
+      photoStorageBytes: async () => {
+        const r = await repo.db.$queryRaw<{ n: bigint | null }[]>`SELECT COALESCE(SUM(octet_length("data") + octet_length("thumb")), 0)::bigint AS n FROM "clinical_photos"`;
+        return Number(r[0]?.n ?? 0);
+      },
+    };
+  })();
+
   quotes = {
     create: async (d: any) => as<any>(await this.db.quote.create({ data: { ...d, items: json(d.items), saleIds: json(d.saleIds) } })),
     update: async (id: string, d: any) =>

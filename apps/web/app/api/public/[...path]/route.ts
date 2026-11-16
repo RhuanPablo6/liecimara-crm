@@ -10,7 +10,10 @@ async function forward(req: Request, { params }: { params: Promise<{ path: strin
   const body = req.method === 'GET' ? undefined : await req.text();
   const res = await fetch(target, {
     method: req.method,
-    headers: { ...(body ? { 'content-type': 'application/json' } : {}), 'x-forwarded-for': req.headers.get('x-forwarded-for') ?? '' },
+    headers: { ...(body ? { 'content-type': 'application/json' } : {}), 'x-forwarded-for': req.headers.get('x-forwarded-for') ?? '',
+      // Registrado junto da assinatura do termo (prova de onde foi assinado).
+      'user-agent': req.headers.get('user-agent') ?? '',
+    },
     body,
     cache: 'no-store',
   });

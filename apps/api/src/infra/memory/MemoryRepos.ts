@@ -27,6 +27,9 @@ import type {
   RecallAction,
   AgendaBlock,
   Quote,
+  ClinicalForm,
+  ClinicalSession,
+  ClinicalPhoto,
   Reminder,
   Sale,
   SupplyPurchase,
@@ -59,6 +62,9 @@ interface State {
   recalls: Map<string, RecallAction>;
   agendaBlocks: Map<string, AgendaBlock>;
   quotes: Map<string, Quote>;
+  clinicalForms: Map<string, ClinicalForm>;
+  clinicalSessions: Map<string, ClinicalSession>;
+  clinicalPhotos: Map<string, ClinicalPhoto & { data: Buffer; thumb: Buffer }>;
   performed: Map<string, ProcedurePerformed>;
   reminders: Map<string, Reminder>;
   connections: Map<string, IntegrationConnection>;
@@ -90,6 +96,9 @@ const emptyState = (): State => ({
   recalls: new Map(),
   agendaBlocks: new Map(),
   quotes: new Map(),
+  clinicalForms: new Map(),
+  clinicalSessions: new Map(),
+  clinicalPhotos: new Map(),
   performed: new Map(),
   reminders: new Map(),
   connections: new Map(),
@@ -449,6 +458,62 @@ export class MemoryRepos implements Repos {
       for (const [k, p] of this.s.performed) if (p.saleId === id) this.s.performed.delete(k);
       if (!this.s.sales.delete(id)) throw new NotFoundError('Venda', id);
     },
+  };
+
+  clinical = {
+    createForm: async (d: Omit<ClinicalForm, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const now = new Date();
+      return insert(this.s.clinicalForms, { ...d, createdAt: now, updatedAt: now }, 'cf_');
+    },
+    updateForm: async (id: string, d: Partial<ClinicalForm>) => patch(this.s.clinicalForms, id, { ...d, updatedAt: new Date() }),
+    findForm: async (id: string) => clone(this.s.clinicalForms.get(id) ?? null),
+    listForms: async (contactId: string) =>
+      clone([...this.s.clinicalForms.values()].filter((f) => f.contactId === contactId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())),
+    listRecentForms: async (limit: number) =>
+      clone([...this.s.clinicalForms.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, limit)),
+    deleteForm: async (id: string) => {
+      this.s.clinicalForms.delete(id);
+    },
+    createSession: async (d: Omit<ClinicalSession, 'id' | 'createdAt' | 'updatedAt'>) => {
+      const now = new Date();
+      return insert(this.s.clinicalSessions, { ...d, createdAt: now, updatedAt: now }, 'cs_');
+    },
+    updateSession: async (id: string, d: Partial<ClinicalSession>) => patch(this.s.clinicalSessions, id, { ...d, updatedAt: new Date() }),
+    findSession: async (id: string) => clone(this.s.clinicalSessions.get(id) ?? null),
+    listSessions: async (contactId: string) =>
+      clone([...this.s.clinicalSessions.values()].filter((f) => f.contactId === contactId).sort((a, b) => b.performedAt.getTime() - a.performedAt.getTime())),
+    deleteSession: async (id: string) => {
+      for (const p of this.s.clinicalPhotos.values()) if (p.sessionId === id) p.sessionId = null;
+      this.s.clinicalSessions.delete(id);
+    },
+    createPhoto: async (d: Omit<ClinicalPhoto, 'id' | 'createdAt'> & { data: Buffer; thumb: Buffer }) => {
+      const p = insert(this.s.clinicalPhotos, { ...d, createdAt: new Date() }, 'cp_');
+      const { data: _d, thumb: _t, ...meta } = p;
+      return meta as ClinicalPhoto;
+    },
+    updatePhoto: async (id: string, d: Partial<ClinicalPhoto>) => {
+      const { data: _d, thumb: _t, ...meta } = patch(this.s.clinicalPhotos, id, d as any) as ClinicalPhoto & { data: Buffer; thumb: Buffer };
+      return meta as ClinicalPhoto;
+    },
+    findPhoto: async (id: string) => {
+      const p = this.s.clinicalPhotos.get(id);
+      if (!p) return null;
+      const { data: _d, thumb: _t, ...meta } = p;
+      return clone(meta as ClinicalPhoto);
+    },
+    photoBytes: async (id: string, variant: 'full' | 'thumb') => {
+      const p = this.s.clinicalPhotos.get(id);
+      return p ? { mime: p.mime, bytes: variant === 'full' ? p.data : p.thumb, contactId: p.contactId } : null;
+    },
+    listPhotos: async (contactId: string) =>
+      [...this.s.clinicalPhotos.values()]
+        .filter((p) => p.contactId === contactId)
+        .sort((a, b) => a.takenAt.getTime() - b.takenAt.getTime())
+        .map(({ data: _d, thumb: _t, ...meta }) => clone(meta as ClinicalPhoto)),
+    deletePhoto: async (id: string) => {
+      this.s.clinicalPhotos.delete(id);
+    },
+    photoStorageBytes: async () => [...this.s.clinicalPhotos.values()].reduce((s, p) => s + p.data.length + p.thumb.length, 0),
   };
 
   quotes = {

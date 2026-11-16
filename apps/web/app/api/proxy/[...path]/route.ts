@@ -24,10 +24,11 @@ async function forward(req: Request, { params }: { params: Promise<{ path: strin
     body,
     cache: 'no-store',
   });
-  return new NextResponse(await res.text(), {
-    status: res.status,
-    headers: { 'content-type': res.headers.get('content-type') ?? 'application/json' },
-  });
+  // arrayBuffer: também serve as fotos do prontuário (binário) sem corromper.
+  const headers: Record<string, string> = { 'content-type': res.headers.get('content-type') ?? 'application/json' };
+  const cache = res.headers.get('cache-control');
+  if (cache) headers['cache-control'] = cache;
+  return new NextResponse(await res.arrayBuffer(), { status: res.status, headers });
 }
 
 export { forward as GET, forward as POST, forward as PUT, forward as PATCH, forward as DELETE };

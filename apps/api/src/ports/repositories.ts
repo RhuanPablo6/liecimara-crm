@@ -29,6 +29,9 @@ import type {
   RecallAction,
   AgendaBlock,
   Quote,
+  ClinicalForm,
+  ClinicalSession,
+  ClinicalPhoto,
   Reminder,
   Sale,
   SupplyPurchase,
@@ -241,6 +244,29 @@ export interface RecallActionRepo {
   list(): Promise<RecallAction[]>;
 }
 
+export interface ClinicalRepo {
+  createForm(d: Omit<ClinicalForm, 'id' | 'createdAt' | 'updatedAt'>): Promise<ClinicalForm>;
+  updateForm(id: string, d: Partial<Omit<ClinicalForm, 'id' | 'createdAt'>>): Promise<ClinicalForm>;
+  findForm(id: string): Promise<ClinicalForm | null>;
+  listForms(contactId: string): Promise<ClinicalForm[]>;
+  /** Mais recentes primeiro, de todas as pacientes. */
+  listRecentForms(limit: number): Promise<ClinicalForm[]>;
+  deleteForm(id: string): Promise<void>;
+  createSession(d: Omit<ClinicalSession, 'id' | 'createdAt' | 'updatedAt'>): Promise<ClinicalSession>;
+  updateSession(id: string, d: Partial<Omit<ClinicalSession, 'id' | 'createdAt'>>): Promise<ClinicalSession>;
+  findSession(id: string): Promise<ClinicalSession | null>;
+  listSessions(contactId: string): Promise<ClinicalSession[]>;
+  deleteSession(id: string): Promise<void>;
+  createPhoto(d: Omit<ClinicalPhoto, 'id' | 'createdAt'> & { data: Buffer; thumb: Buffer }): Promise<ClinicalPhoto>;
+  updatePhoto(id: string, d: Partial<Pick<ClinicalPhoto, 'sessionId' | 'stage' | 'angle' | 'caption' | 'takenAt'>>): Promise<ClinicalPhoto>;
+  findPhoto(id: string): Promise<ClinicalPhoto | null>;
+  photoBytes(id: string, variant: 'full' | 'thumb'): Promise<{ mime: string; bytes: Buffer; contactId: string } | null>;
+  listPhotos(contactId: string): Promise<ClinicalPhoto[]>;
+  deletePhoto(id: string): Promise<void>;
+  /** Total guardado em fotos (bytes), para acompanhar o espaço do banco. */
+  photoStorageBytes(): Promise<number>;
+}
+
 export interface QuoteRepo {
   create(data: Omit<Quote, 'id' | 'number' | 'createdAt' | 'updatedAt'>): Promise<Quote>;
   update(id: string, data: Partial<Omit<Quote, 'id' | 'number' | 'createdAt'>>): Promise<Quote>;
@@ -297,6 +323,7 @@ export interface Repos {
   recalls: RecallActionRepo;
   agendaBlocks: AgendaBlockRepo;
   quotes: QuoteRepo;
+  clinical: ClinicalRepo;
   purge: PurgeRepo;
   /** Executa `fn` em transação. */
   tx<T>(fn: (r: Repos) => Promise<T>): Promise<T>;

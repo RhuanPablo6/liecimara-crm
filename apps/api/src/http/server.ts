@@ -12,6 +12,7 @@ import { registerAdsManagerRoutes } from './routes/adsManager.js';
 import { registerAgendaRoutes } from './routes/agenda.js';
 import { registerQuoteRoutes } from './routes/quotes.js';
 import { registerPricingRoutes } from './routes/pricing.js';
+import { registerClinicalRoutes } from './routes/clinical.js';
 import { registerPublicAppointmentRoutes } from './routes/publicAppointments.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerFinanceRoutes } from './routes/finance.js';
@@ -105,6 +106,7 @@ export function buildServer(c: Container) {
   registerPublicAppointmentRoutes(app, c);
   registerQuoteRoutes(app, c, guard);
   registerPricingRoutes(app, c, guard);
+  registerClinicalRoutes(app, c, guard);
 
   return app;
 }

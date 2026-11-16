@@ -2,12 +2,14 @@
 
 import { ArrowLeft, CalendarCheck, FilePlus2, FileText, CalendarX, CircleDollarSign, MessageCircle, ShoppingBag, Sparkles, UserPlus } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { use, useState } from 'react';
 import { useMe } from '@/components/access';
 import { QuoteEditor } from '@/components/quotes/quote-editor';
 import { QuoteStatusBadge, quoteNumber } from '@/components/quotes/quote-document';
 import { Button } from '@/components/ui/button';
+import { ClinicalRecord } from '@/components/clinical/clinical-record';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageButton } from '@/components/message-button';
 import { PatientTagControl } from '@/components/patient-tag';
 import { StageBadge } from '@/components/badges';
@@ -95,6 +97,10 @@ function PatientQuotes({ contact }: { contact: { id: string; name: string | null
 export default function PatientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data, error, reload } = useApi<any>(`/patients/${id}`);
+  const me = useMe();
+  const search = useSearchParams();
+  const canClinical = !!me?.permissions.includes('clinical:read');
+  const [tab, setTab] = useState(search.get('tab') === 'prontuario' ? 'prontuario' : 'resumo');
   if (error) return <ErrorText>{error}</ErrorText>;
   if (!data) return <p className="text-sm text-muted-foreground">Carregando…</p>;
   const { contact, summary: s, leads, events } = data;
@@ -133,6 +139,14 @@ export default function PatientPage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
+      <Tabs value={canClinical ? tab : 'resumo'} onValueChange={setTab}>
+        {canClinical && (
+          <TabsList className="print:hidden">
+            <TabsTrigger value="resumo">Resumo</TabsTrigger>
+            <TabsTrigger value="prontuario">Prontuário</TabsTrigger>
+          </TabsList>
+        )}
+        <TabsContent value="resumo" className="space-y-6">
       {s && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Total gasto" value={brl(s.spentCents)} hint={`${num(s.purchases)} compra(s) · ticket ${s.avgTicketCents == null ? '—' : brl(s.avgTicketCents)}`} />
@@ -237,6 +251,13 @@ export default function PatientPage({ params }: { params: Promise<{ id: string }
           </Card>
         </div>
       </div>
+        </TabsContent>
+        {canClinical && (
+          <TabsContent value="prontuario">
+            {tab === 'prontuario' && <ClinicalRecord contact={{ id: contact.id, name: contact.name, waId: contact.waId }} />}
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }

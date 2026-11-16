@@ -16,6 +16,7 @@ export const SCREENS: Screen[] = [
   { key: 'agenda', label: 'Agenda', path: '/agenda', group: 'Atendimento', permissions: ['leads:read', 'leads:write'] },
   { key: 'leads', label: 'Leads', path: '/leads', group: 'Atendimento', permissions: ['leads:read', 'leads:write', 'attribution:manual', 'sales:write', 'payments:write'] },
   { key: 'orcamentos', label: 'Orçamentos', path: '/orcamentos', group: 'Atendimento', permissions: ['leads:read', 'leads:write', 'sales:write'] },
+  { key: 'prontuario', label: 'Prontuário (fichas, termos e fotos)', path: '/prontuario', group: 'Atendimento', permissions: ['leads:read', 'clinical:read', 'clinical:write'] },
   { key: 'pacientes', label: 'Pacientes', path: '/pacientes', group: 'Atendimento', permissions: ['leads:read', 'leads:write'] },
   { key: 'retornos', label: 'Retornos', path: '/retornos', group: 'Atendimento', permissions: ['leads:read', 'leads:write', 'messages:manage'] },
   { key: 'funil', label: 'Funil', path: '/funil', group: 'Atendimento', permissions: ['leads:read', 'leads:write'] },

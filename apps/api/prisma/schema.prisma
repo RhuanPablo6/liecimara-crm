@@ -664,3 +664,74 @@ model Quote {
   @@index([createdAt])
   @@map("quotes")
 }
+
+// ── Prontuário estético ──
+
+/// Anamnese ou termo de consentimento. Depois de assinado, o conteúdo não muda (hash guardado).
+model ClinicalForm {
+  id               String    @id @default(cuid())
+  contactId        String
+  kind             String // ANAMNESIS | CONSENT
+  title            String
+  procedureId      String?
+  /// Anamnese: { sections: [{ title, items: [{ q, a, detail?, alert? }] }] } · Termo: { text }
+  content          Json
+  status           String    @default("PENDING") // PENDING | SIGNED
+  /// Autorização de uso de imagem marcada pela paciente: NONE | INTERNAL | MARKETING
+  imageUse         String?
+  signerName       String?
+  signerDocument   String?
+  /// PNG (data URL) da assinatura feita no celular
+  signature        String?
+  signedAt         DateTime?
+  signedIp         String?
+  signedUserAgent  String?
+  contentHash      String?
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([contactId])
+  @@map("clinical_forms")
+}
+
+/// Registro de cada sessão: produtos (com lote), áreas tratadas e evolução.
+model ClinicalSession {
+  id           String   @id @default(cuid())
+  contactId    String
+  procedureId  String?
+  performedAt  DateTime
+  /// [{ name, lot, quantity, unit }]
+  products     Json
+  areas        String?
+  notes        String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([contactId])
+  @@map("clinical_sessions")
+}
+
+/// Foto de antes/depois. Guardada no banco (privada, só via API com permissão).
+model ClinicalPhoto {
+  id          String   @id @default(cuid())
+  contactId   String
+  sessionId   String?
+  takenAt     DateTime
+  stage       String // BEFORE | AFTER | FOLLOWUP
+  angle       String?
+  caption     String?
+  mime        String
+  data        Bytes
+  thumb       Bytes
+  width       Int
+  height      Int
+  sizeBytes   Int
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([contactId])
+  @@index([sessionId])
+  @@map("clinical_photos")
+}

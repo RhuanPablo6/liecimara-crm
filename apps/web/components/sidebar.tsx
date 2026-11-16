@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, BellRing, CalendarClock, CalendarDays, KanbanSquare, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, ShieldCheck, Target, Users, Wallet, FileText, Calculator } from 'lucide-react';
+import { BarChart3, BellRing, CalendarClock, CalendarDays, KanbanSquare, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, ShieldCheck, Target, Users, Wallet, FileText, Calculator, Stethoscope } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -13,6 +13,7 @@ const NAV = [
   { key: 'agenda', href: '/agenda', label: 'Agenda', icon: CalendarDays },
   { key: 'leads', href: '/leads', label: 'Leads', icon: Users },
   { key: 'orcamentos', href: '/orcamentos', label: 'Orçamentos', icon: FileText },
+  { key: 'prontuario', href: '/prontuario', label: 'Prontuário', icon: Stethoscope },
   { key: 'pacientes', href: '/pacientes', label: 'Pacientes', icon: HeartHandshake },
   { key: 'retornos', href: '/retornos', label: 'Retornos', icon: BellRing },
   { key: 'funil', href: '/funil', label: 'Funil', icon: KanbanSquare },

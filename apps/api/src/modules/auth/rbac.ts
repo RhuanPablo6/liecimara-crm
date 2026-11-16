@@ -20,6 +20,9 @@ export type Permission =
   | 'finance:write'
   | 'ads:manage'
   | 'messages:manage'
+  /** Prontuário estético: anamnese, termos, sessões e fotos (dados de saúde). */
+  | 'clinical:read'
+  | 'clinical:write'
   /** Apagar de vez (lead de teste, lançamento errado). Só administrador. */
   | 'records:delete'
   | 'app:use';
@@ -45,6 +48,8 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     'ads:manage',
     'messages:manage',
     'records:delete',
+    'clinical:read',
+    'clinical:write',
     'app:use',
   ],
   MANAGER: [
@@ -64,6 +69,8 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     'finance:write',
     'ads:manage',
     'messages:manage',
+    'clinical:read',
+    'clinical:write',
     'app:use',
   ],
   RECEPTIONIST: ['leads:read', 'leads:write', 'sales:write', 'payments:write', 'attribution:manual', 'reports:read'],
