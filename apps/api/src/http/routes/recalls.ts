@@ -27,12 +27,12 @@ export function registerRecallRoutes(app: FastifyInstance, c: Container, guard: 
     return a;
   });
 
-  app.get('/messages/templates', { preHandler: guard('leads:read') }, async () => ({
+  app.get('/messages/templates', { preHandler: guard('app:use') }, async () => ({
     ...((await c.repos.settings.get<TemplatesSettings>(TEMPLATES_KEY)) ?? DEFAULT_TEMPLATES),
     defaults: DEFAULT_TEMPLATES,
   }));
 
-  app.put('/messages/templates', { preHandler: guard('procedures:manage') }, async (req) => {
+  app.put('/messages/templates', { preHandler: guard('messages:manage') }, async (req) => {
     const b = z
       .object({
         clinicName: z.string().trim().min(2).max(120),

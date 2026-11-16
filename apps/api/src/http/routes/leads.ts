@@ -49,7 +49,7 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
     );
   }
 
-  app.get('/meta/labels', { preHandler: guard('leads:read') }, async () => ({
+  app.get('/meta/labels', { preHandler: guard('app:use') }, async () => ({
     stages: STAGE_LABELS_PT,
     confidence: CONFIDENCE_LABELS_PT,
     lostReasons: LOST_REASON_LABELS_PT,
@@ -240,7 +240,7 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
     return c.repos.reminders.listPending(until, q.mine === 'true' ? req.user!.sub : undefined);
   });
 
-  app.get('/procedures', { preHandler: guard('leads:read') }, async () => c.repos.procedures.list());
+  app.get('/procedures', { preHandler: guard('app:use') }, async () => c.repos.procedures.list());
 
   app.post('/procedures', { preHandler: guard('procedures:manage') }, async (req) => {
     const b = z.object({ name: z.string().min(2), defaultPriceCents: z.number().int().positive().nullish() }).parse(req.body);
@@ -282,7 +282,7 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
     return { generated: pending.length };
   });
 
-  app.get('/ads', { preHandler: guard('leads:read') }, async () => {
+  app.get('/ads', { preHandler: guard('app:use') }, async () => {
     const [ads, campaigns] = await Promise.all([c.repos.ads.listAds(), c.repos.ads.listCampaigns()]);
     const cn = new Map(campaigns.map((x) => [x.metaId, x.name]));
     return ads.map((a) => ({

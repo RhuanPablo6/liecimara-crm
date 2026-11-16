@@ -18,7 +18,9 @@ export type Permission =
   | 'purchases:write'
   | 'finance:read'
   | 'finance:write'
-  | 'ads:manage';
+  | 'ads:manage'
+  | 'messages:manage'
+  | 'app:use';
 
 const MATRIX: Record<Role, readonly Permission[]> = {
   ADMIN: [
@@ -39,6 +41,8 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     'finance:read',
     'finance:write',
     'ads:manage',
+    'messages:manage',
+    'app:use',
   ],
   MANAGER: [
     'leads:read',
@@ -56,6 +60,8 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     'finance:read',
     'finance:write',
     'ads:manage',
+    'messages:manage',
+    'app:use',
   ],
   RECEPTIONIST: ['leads:read', 'leads:write', 'sales:write', 'payments:write', 'attribution:manual', 'reports:read'],
   VIEWER: ['leads:read', 'reports:read'],

@@ -27,6 +27,12 @@ export class UnauthorizedError extends DomainError {
   }
 }
 
+export class ConflictError extends DomainError {
+  constructor(message: string) {
+    super('CONFLICT', message, 409);
+  }
+}
+
 /** Falha transitória: o job deve ser reprocessado com backoff. */
 export class RetryableError extends Error {
   constructor(

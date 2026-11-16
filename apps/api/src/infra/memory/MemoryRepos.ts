@@ -136,6 +136,7 @@ export class MemoryRepos implements Repos {
     findByEmail: async (email: string) => clone([...this.s.users.values()].find((u) => u.email === email) ?? null),
     create: async (d: Omit<User, 'id'>) => insert(this.s.users, d, 'usr_'),
     list: async () => clone([...this.s.users.values()]),
+    update: async (id: string, d: Partial<User>) => patch(this.s.users, id, d),
   };
 
   contacts = {

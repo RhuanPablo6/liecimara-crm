@@ -46,8 +46,10 @@ export class PrismaRepos implements Repos {
   users = {
     findById: async (id: string) => as<any>(await this.db.user.findUnique({ where: { id } })),
     findByEmail: async (email: string) => as<any>(await this.db.user.findUnique({ where: { email } })),
-    create: async (d: any) => as<any>(await this.db.user.create({ data: d })),
+    create: async (d: any) => as<any>(await this.db.user.create({ data: { ...d, screens: json(d.screens) } })),
     list: async () => as<any>(await this.db.user.findMany({ orderBy: { name: 'asc' } })),
+    update: async (id: string, d: any) =>
+      as<any>(await this.db.user.update({ where: { id }, data: 'screens' in d ? { ...d, screens: json(d.screens) } : d })),
   };
 
   contacts = {

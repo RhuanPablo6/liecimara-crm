@@ -45,6 +45,7 @@ export interface UserRepo {
   findByEmail(email: string): Promise<User | null>;
   create(data: Create<User>): Promise<User>;
   list(): Promise<User[]>;
+  update(id: string, data: Partial<Omit<User, 'id'>>): Promise<User>;
 }
 
 export interface ContactRepo {

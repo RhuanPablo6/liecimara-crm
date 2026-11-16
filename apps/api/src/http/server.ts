@@ -3,9 +3,10 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import type { Container } from '../container.js';
-import { DomainError, UnauthorizedError } from '../domain/errors.js';
+import { DomainError, ForbiddenError, UnauthorizedError } from '../domain/errors.js';
 import type { TokenClaims } from '../modules/auth/auth.js';
-import { assertCan, type Permission } from '../modules/auth/rbac.js';
+import type { Permission } from '../modules/auth/rbac.js';
+import { effectivePermissions } from '../modules/auth/screens.js';
 import { registerAdsManagerRoutes } from './routes/adsManager.js';
 import { registerAgendaRoutes } from './routes/agenda.js';
 import { registerPublicAppointmentRoutes } from './routes/publicAppointments.js';
@@ -62,12 +63,20 @@ export function buildServer(c: Container) {
     return reply.status((err as any).statusCode ?? 500).send({ error: 'INTERNAL', message: 'Erro interno' });
   });
 
-  /** preHandler: exige token válido e a permissão informada. */
+  /**
+   * preHandler: exige token válido, usuário ativo e a permissão informada. O usuário é lido a cada
+   * requisição: desativar alguém ou mudar as telas dele vale na hora, sem esperar o token expirar.
+   */
   const guard = (permission: Permission) => async (req: FastifyRequest, _reply: FastifyReply) => {
     const header = req.headers.authorization;
     if (!header?.startsWith('Bearer ')) throw new UnauthorizedError();
-    req.user = c.auth.authenticate(header.slice(7));
-    assertCan(req.user.role, permission);
+    const claims = c.auth.authenticate(header.slice(7));
+    const user = await c.repos.users.findById(claims.sub);
+    if (!user || !user.active) throw new UnauthorizedError('Usuário desativado');
+    req.user = { ...claims, role: user.role, name: user.name };
+    if (!effectivePermissions(user).includes(permission)) {
+      throw new ForbiddenError('Você não tem acesso a esta tela. Peça ao administrador para liberar.');
+    }
   };
 
   app.get('/health', async () => {

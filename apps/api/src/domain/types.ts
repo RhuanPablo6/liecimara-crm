@@ -41,6 +41,9 @@ export interface User {
   passwordHash: string;
   role: Role;
   active: boolean;
+  /** Telas liberadas; nulo = permissões do perfil. */
+  screens?: string[] | null;
+  lastLoginAt?: Date | null;
 }
 
 export interface Contact {

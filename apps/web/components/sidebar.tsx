@@ -1,31 +1,37 @@
 'use client';
 
-import { BarChart3, BellRing, CalendarClock, CalendarDays, KanbanSquare, HeartHandshake, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, Target, Users, Wallet } from 'lucide-react';
+import { BarChart3, BellRing, CalendarClock, CalendarDays, KanbanSquare, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, ShieldCheck, Target, Users, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { useMe } from '@/components/access';
+import { ChangePasswordDialog } from '@/components/change-password';
 import { cn } from '@/lib/utils';
 
 const NAV = [
-  { href: '/', label: 'Painel', icon: LayoutDashboard },
-  { href: '/agenda', label: 'Agenda', icon: CalendarDays },
-  { href: '/leads', label: 'Leads', icon: Users },
-  { href: '/pacientes', label: 'Pacientes', icon: HeartHandshake },
-  { href: '/retornos', label: 'Retornos', icon: BellRing },
-  { href: '/funil', label: 'Funil', icon: KanbanSquare },
-  { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
-  { href: '/anuncios', label: 'Anúncios', icon: Megaphone },
-  { href: '/financeiro', label: 'Financeiro', icon: Wallet },
-  { href: '/contas', label: 'Contas', icon: CalendarClock },
-  { href: '/metas', label: 'Metas', icon: Target },
-  { href: '/compras', label: 'Compras', icon: Package },
-  { href: '/despesas', label: 'Despesas', icon: Receipt },
-  { href: '/configuracoes', label: 'Integrações', icon: Settings },
+  { key: 'painel', href: '/', label: 'Painel', icon: LayoutDashboard },
+  { key: 'agenda', href: '/agenda', label: 'Agenda', icon: CalendarDays },
+  { key: 'leads', href: '/leads', label: 'Leads', icon: Users },
+  { key: 'pacientes', href: '/pacientes', label: 'Pacientes', icon: HeartHandshake },
+  { key: 'retornos', href: '/retornos', label: 'Retornos', icon: BellRing },
+  { key: 'funil', href: '/funil', label: 'Funil', icon: KanbanSquare },
+  { key: 'relatorios', href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
+  { key: 'anuncios', href: '/anuncios', label: 'Anúncios', icon: Megaphone },
+  { key: 'financeiro', href: '/financeiro', label: 'Financeiro', icon: Wallet },
+  { key: 'contas', href: '/contas', label: 'Contas', icon: CalendarClock },
+  { key: 'metas', href: '/metas', label: 'Metas', icon: Target },
+  { key: 'compras', href: '/compras', label: 'Compras', icon: Package },
+  { key: 'despesas', href: '/despesas', label: 'Despesas', icon: Receipt },
+  { key: 'integracoes', href: '/configuracoes', label: 'Integrações', icon: Settings },
+  { key: 'usuarios', href: '/usuarios', label: 'Usuários', icon: ShieldCheck },
 ];
 
-export function Sidebar({ userName }: { userName: string }) {
+export function Sidebar() {
   const path = usePathname();
   const [open, setOpen] = useState(false);
+  const [pwd, setPwd] = useState(false);
+  const me = useMe();
+  const items = me ? NAV.filter((n) => me.screens.includes(n.key)) : [];
 
   async function logout() {
     await fetch('/api/session', { method: 'DELETE' });
@@ -33,8 +39,8 @@ export function Sidebar({ userName }: { userName: string }) {
   }
 
   const nav = (
-    <nav className="flex flex-1 flex-col gap-1 px-3">
-      {NAV.map(({ href, label, icon: Icon }) => {
+    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 pb-4">
+      {items.map(({ href, label, icon: Icon }) => {
         const active = href === '/' ? path === '/' : path.startsWith(href);
         return (
           <Link
@@ -77,12 +83,18 @@ export function Sidebar({ userName }: { userName: string }) {
         </div>
         {nav}
         <div className="border-t border-white/10 px-6 pt-4">
-          <p className="truncate text-sm text-navy-100">{userName}</p>
-          <button onClick={logout} className="mt-2 flex items-center gap-2 text-xs text-navy-200 hover:text-white">
-            <LogOut className="h-3.5 w-3.5" /> Sair
-          </button>
+          <p className="truncate text-sm text-navy-100">{me?.user.name ?? ' '}</p>
+          <div className="mt-2 flex items-center gap-4">
+            <button onClick={() => setPwd(true)} className="flex items-center gap-2 text-xs text-navy-200 hover:text-white">
+              <KeyRound className="h-3.5 w-3.5" /> Alterar senha
+            </button>
+            <button onClick={logout} className="flex items-center gap-2 text-xs text-navy-200 hover:text-white">
+              <LogOut className="h-3.5 w-3.5" /> Sair
+            </button>
+          </div>
         </div>
       </aside>
+      {pwd && <ChangePasswordDialog open={pwd} onOpenChange={setPwd} />}
     </>
   );
 }
