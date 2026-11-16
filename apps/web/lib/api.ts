@@ -4,12 +4,18 @@ import { useCallback, useEffect, useState } from 'react';
 
 /** Todas as chamadas passam pelo proxy do Next, que injeta o token do cookie httpOnly. */
 export async function api<T = any>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-  const res = await fetch(`/api/proxy${path}`, {
-    method: init.method ?? 'GET',
-    headers: init.body ? { 'content-type': 'application/json' } : undefined,
-    body: init.body ? JSON.stringify(init.body) : undefined,
-    cache: 'no-store',
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api/proxy${path}`, {
+      method: init.method ?? 'GET',
+      headers: init.body ? { 'content-type': 'application/json' } : undefined,
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      cache: 'no-store',
+    });
+  } catch {
+    // "Load failed" (Safari) / "Failed to fetch" (Chrome): a requisição nem chegou a ter resposta.
+    throw new Error('Não foi possível falar com o servidor (internet instável ou a página ficou em segundo plano). Tente de novo.');
+  }
   if (res.status === 401) {
     window.location.href = '/login';
     throw new Error('Sessão expirada');
