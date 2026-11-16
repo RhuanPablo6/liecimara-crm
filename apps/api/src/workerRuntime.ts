@@ -8,6 +8,7 @@ import type { Env } from './config/env.js';
 import type { Container } from './container.js';
 import { META_SYNC_JOB } from './modules/meta/MetaSyncService.js';
 import { PROCESS_EVENT_JOB } from './modules/whatsapp/WebhookIngestionService.js';
+import { CONFIRMATIONS_JOB } from './modules/whatsapp/ConfirmationService.js';
 import { Worker } from './queue/Worker.js';
 
 export const workerLog = {
@@ -22,6 +23,10 @@ function createWorker(c: Container, log = workerLog): Worker {
     .register(META_SYNC_JOB, async (payload: { days?: number }) => {
       const r = await c.metaSync.sync({ days: payload?.days ?? 30 });
       log.info(r, 'sincronização Meta concluída');
+    })
+    .register(CONFIRMATIONS_JOB, async () => {
+      const r = await c.confirmations.runDue();
+      if (r.sent || r.failed) log.info(r, 'confirmações pelo WhatsApp');
     });
 }
 
@@ -44,6 +49,10 @@ export function startWorker(c: Container, env: Env, log = workerLog): () => void
     setInterval(
       () => void c.queue.enqueue(META_SYNC_JOB, { days: 7 }, { dedupKey: 'meta-sync' }).catch((e) => log.error({ e: String(e) })),
       env.META_SYNC_CRON_MINUTES * 60_000,
+    ),
+    setInterval(
+      () => void c.queue.enqueue(CONFIRMATIONS_JOB, {}, { dedupKey: 'whatsapp-confirmations' }).catch((e) => log.error({ e: String(e) })),
+      10 * 60_000,
     ),
     setInterval(
       () =>
@@ -82,6 +91,7 @@ export function createPump(c: Container, env: Env, log = workerLog) {
         const n = await c.ingestion.sweepOrphans();
         if (n) log.warn({ n }, 'eventos órfãos reenfileirados');
         await enqueueMetaSyncIfStale(c, env);
+        await c.queue.enqueue(CONFIRMATIONS_JOB, {}, { dedupKey: 'whatsapp-confirmations' });
       } catch (e) {
         log.error({ e: String(e) }, 'erro na manutenção da fila');
       }

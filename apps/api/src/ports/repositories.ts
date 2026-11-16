@@ -152,6 +152,8 @@ export interface AppointmentRepo {
   listByLead(leadId: string): Promise<Appointment[]>;
   listCreatedIn(range: DateRange): Promise<Appointment[]>;
   listScheduledBetween(range: DateRange): Promise<Appointment[]>;
+  /** Marca a confirmação como enviada só se ainda não foi (evita mensagem em dobro). */
+  claimConfirmation(id: string, at: Date): Promise<boolean>;
 }
 
 export interface SaleRepo {

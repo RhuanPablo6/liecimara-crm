@@ -30,6 +30,9 @@ export type ProcessOutcome =
  * Idempotente: reprocessar o mesmo evento não duplica dados.
  */
 export class WhatsAppEventProcessor {
+  /** Trata o toque da paciente num botão (confirmação de agendamento). Ligado no container. */
+  buttonHandler: ((evt: import('./events.js').InboundMessageEvent) => Promise<string | null>) | null = null;
+
   constructor(
     private readonly repos: Repos,
     private readonly engine: AttributionEngine,
@@ -73,8 +76,11 @@ export class WhatsAppEventProcessor {
 
   async dispatch(provider: IntegrationProvider, evt: NormalizedEvent, job?: JobRecord): Promise<ProcessOutcome> {
     switch (evt.kind) {
-      case 'MESSAGE_INBOUND':
-        return { kind: evt.kind, attribution: await this.engine.processInboundMessage(evt) };
+      case 'MESSAGE_INBOUND': {
+        const attribution = await this.engine.processInboundMessage(evt);
+        if (evt.buttonPayload && this.buttonHandler) await this.buttonHandler(evt);
+        return { kind: evt.kind, attribution };
+      }
       case 'MESSAGE_ECHO':
         return { kind: evt.kind, detail: await this.onEcho(evt) };
       case 'MESSAGE_STATUS':

@@ -57,6 +57,38 @@ export function registerIntegrationRoutes(app: FastifyInstance, c: Container, gu
     return { id: conn.id, status: conn.status };
   });
 
+  // Conexão de um clique com o YCloud: só a API key da conta.
+  app.post('/integrations/whatsapp/ycloud', { preHandler: guard('integrations:write') }, async (req) => {
+    const b = z.object({ apiKey: z.string().trim().min(8), confirmProductionNumber: z.boolean().optional() }).parse(req.body);
+    const conn = await c.integrations.configureYCloud(b, actorOf(req));
+    return { id: conn.id, status: conn.status, displayPhoneNumber: conn.displayPhoneNumber };
+  });
+
+  // ---------- Confirmação de agendamento pelo WhatsApp ----------
+
+  app.get('/whatsapp/confirmations', { preHandler: guard('leads:read') }, async () => c.confirmations.status());
+
+  app.put('/whatsapp/confirmations/settings', { preHandler: guard('integrations:write') }, async (req) => {
+    const b = z.object({ enabled: z.boolean().optional(), sendHour: z.number().int().min(7).max(19).optional() }).parse(req.body);
+    const next = await c.confirmations.saveSettings(b);
+    await c.audit.record({ userId: req.user!.sub, action: 'whatsapp.confirmations.settings', entityType: 'Setting', entityId: null, after: b, ip: req.ip });
+    return next;
+  });
+
+  app.post('/whatsapp/confirmations/template', { preHandler: guard('integrations:write') }, async (req) => {
+    const r = await c.confirmations.createTemplate();
+    await c.audit.record({ userId: req.user!.sub, action: 'whatsapp.template.create', entityType: 'Setting', entityId: null, after: r, ip: req.ip });
+    return r;
+  });
+
+  app.post('/appointments/:id/whatsapp-confirmation', { preHandler: guard('leads:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const b = z.object({ force: z.boolean().optional() }).parse(req.body ?? {});
+    const a = await c.confirmations.send(id, b);
+    await c.audit.record({ userId: req.user!.sub, action: 'appointment.whatsapp_confirmation', entityType: 'Appointment', entityId: id, ip: req.ip });
+    return { ok: true, confirmationSentAt: a.confirmationSentAt ?? null };
+  });
+
   app.post('/integrations/whatsapp/:kind/diagnose', { preHandler: guard('integrations:read') }, async (req) => {
     const { kind } = kindParam.parse(req.params);
     return c.integrations.runDiagnostics(kind, req.user!.sub);

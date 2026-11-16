@@ -9,6 +9,7 @@ import { CloudApiAdapter } from '../whatsapp/adapters/CloudApiAdapter.js';
 import { PartnerCoexistenceAdapter, type PartnerConfig } from '../whatsapp/adapters/PartnerCoexistenceAdapter.js';
 import { ALL_AD_ACCOUNTS, normalizeAdAccountsInput, parseAdAccounts } from '../meta/adAccounts.js';
 import type { WhatsAppProvider } from '../whatsapp/WhatsAppProvider.js';
+import { YCLOUD_EVENTS, YCloudAdapter } from '../whatsapp/adapters/YCloudAdapter.js';
 
 export interface IntegrationSettings {
   graphVersion: string;
@@ -161,6 +162,68 @@ export class IntegrationService {
   }
 
   /**
+   * Conexão de um clique com o YCloud (plano grátis, coexistência):
+   * 1) com a API key, acha o número conectado na conta; 2) cria (ou reaproveita) o webhook
+   * apontando para /webhooks/whatsapp/partner e guarda o segredo; 3) salva a conexão.
+   */
+  async configureYCloud(input: { apiKey: string; confirmProductionNumber?: boolean }, actor: { id: string; role: Role }): Promise<IntegrationConnection> {
+    this.guardProduction(this.env, actor.role, input.confirmProductionNumber);
+    const apiKey = input.apiKey.trim();
+    const call = (method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown) =>
+      YCloudAdapter.call(this.http, apiKey, method, path, body).catch((e: any) => {
+        if (e?.status === 401 || e?.status === 403) throw new DomainError('PARTNER_AUTH', 'O YCloud recusou a chave. Confira se copiou a API Key inteira (Desenvolvedor → API Keys).');
+        throw new DomainError('PARTNER_API', `YCloud: ${e?.message ?? 'erro'}`);
+      });
+
+    const phones = (await call('GET', 'whatsapp/phoneNumbers?limit=100'))?.items ?? [];
+    const phone = phones.find((x: any) => (x.status ?? 'CONNECTED') === 'CONNECTED') ?? phones[0];
+    if (!phone?.phoneNumber) {
+      throw new DomainError('PARTNER_NO_NUMBER', 'Nenhum número conectado no YCloud ainda. Termine a conexão do WhatsApp (coexistência) no YCloud e tente de novo.');
+    }
+
+    const webhookUrl = `${this.settings.publicUrl.replace(/\/$/, '')}/webhooks/whatsapp/partner`;
+    const endpoints = (await call('GET', 'webhookEndpoints?limit=100'))?.items ?? [];
+    let endpoint = endpoints.find((x: any) => x.url === webhookUrl);
+    if (endpoint) {
+      const missing = YCLOUD_EVENTS.filter((e) => !(endpoint.enabledEvents ?? []).includes(e));
+      if (missing.length || endpoint.status !== 'active') {
+        endpoint = await call('PATCH', `webhookEndpoints/${endpoint.id}`, { enabledEvents: [...new Set([...(endpoint.enabledEvents ?? []), ...YCLOUD_EVENTS])], status: 'active' }).catch(() => endpoint);
+      }
+    } else {
+      const body = { url: webhookUrl, enabledEvents: YCLOUD_EVENTS, description: 'CRM Clínica Liecimara' };
+      endpoint = await call('POST', 'webhookEndpoints', body).catch(async () =>
+        // Se algum evento não existir nesta conta, cria só com o essencial.
+        call('POST', 'webhookEndpoints', { ...body, enabledEvents: ['whatsapp.inbound_message.received', 'whatsapp.message.updated'] }),
+      );
+    }
+    if (!endpoint?.secret) throw new DomainError('PARTNER_WEBHOOK', 'O YCloud não devolveu o segredo do webhook. Tente de novo em instantes.');
+
+    const conn = await this.repos.connections.upsert('WHATSAPP_COEXISTENCE_PARTNER', this.env, {
+      wabaId: phone.wabaId ?? null,
+      phoneNumberId: phone.phoneNumber,
+      displayPhoneNumber: phone.displayPhoneNumber ?? phone.phoneNumber,
+      coexistence: true,
+      partnerConfig: { partnerName: 'YCloud', baseUrl: 'https://api.ycloud.com/v2', phoneNumberId: phone.phoneNumber, webhookEndpointId: endpoint.id },
+      encryptedCredentials: this.vault.encrypt({ apiKey, webhookSecret: endpoint.secret }),
+      status: 'CONNECTED',
+    });
+    await this.repos.audit.log({
+      userId: actor.id,
+      action: 'integration.partner.configure',
+      entityType: 'IntegrationConnection',
+      entityId: conn.id,
+      after: { partner: 'YCloud', phone: phone.displayPhoneNumber ?? phone.phoneNumber, webhookUrl, environment: this.env },
+    });
+    return conn;
+  }
+
+  /** Adaptador do YCloud quando ele é o parceiro conectado (envio de mensagens). */
+  async getYCloud(): Promise<YCloudAdapter | null> {
+    const p = await this.getProvider('partner');
+    return p instanceof YCloudAdapter ? p : null;
+  }
+
+  /**
    * Salva as contas de anúncios (lista ou "todas") e, se informado, um novo token.
    * Sem token novo, mantém o já salvo (permite trocar só as contas).
    */
@@ -216,6 +279,12 @@ export class IntegrationService {
     const c = await this.repos.connections.find('WHATSAPP_COEXISTENCE_PARTNER', this.env);
     if (!c?.partnerConfig || !c.encryptedCredentials) return null;
     const creds = this.vault.decrypt(c.encryptedCredentials);
+    if ((c.partnerConfig as any).partnerName === 'YCloud') {
+      return new YCloudAdapter(
+        { apiKey: creds.apiKey ?? '', webhookSecret: creds.webhookSecret ?? '', phoneNumber: c.phoneNumberId ?? '', wabaId: c.wabaId ?? null },
+        this.http,
+      );
+    }
     const pc = c.partnerConfig as PartnerConfig;
     const webhookAuth =
       pc.webhookAuth.mode === 'hmac-sha256'
@@ -288,6 +357,7 @@ export class IntegrationService {
         wabaId: c.wabaId,
         phoneNumberId: c.phoneNumberId,
         coexistence: c.coexistence,
+        partnerName: (c.partnerConfig as any)?.partnerName ?? null,
         credential: CredentialVault.mask(creds.accessToken ?? creds.apiKey),
         webhook: {
           status: webhook,

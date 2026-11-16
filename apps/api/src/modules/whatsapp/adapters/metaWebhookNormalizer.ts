@@ -23,7 +23,12 @@ const textOf = (m: any): string | null =>
   m?.document?.caption ??
   null;
 
-function referralOf(m: any): AdReferral | null {
+export const buttonPayloadOf = (m: any): string | null =>
+  m?.button?.payload ?? m?.interactive?.button_reply?.id ?? null;
+
+export const messageTextOf = (m: any): string | null => textOf(m);
+
+export function referralOf(m: any): AdReferral | null {
   const r = m?.referral;
   if (!r || typeof r !== 'object') return null;
   return {
@@ -69,6 +74,7 @@ export function normalizeMetaWebhook(payload: any, receivedAt = new Date()): Nor
               type: m.type ?? 'unknown',
               text: textOf(m),
               referral: referralOf(m),
+              buttonPayload: buttonPayloadOf(m),
             });
           }
           for (const s of v.statuses ?? []) {

@@ -335,6 +335,10 @@ model Appointment {
   patientNote       String?
   // Pedido de remarcação já tratado pela recepção
   rescheduleHandled Boolean  @default(false)
+  /// Confirmação automática pelo WhatsApp (YCloud)
+  confirmationSentAt   DateTime?
+  confirmationMessageId String?
+  confirmationError    String?
   status        AppointmentStatus @default(SCHEDULED)
   cancelReason  String?
   createdById   String?

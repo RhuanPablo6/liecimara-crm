@@ -30,6 +30,8 @@ export interface InboundMessageEvent extends Base {
   type: string;
   text: string | null;
   referral: AdReferral | null;
+  /** Botão tocado pela paciente (payload do modelo ou id do botão interativo). */
+  buttonPayload?: string | null;
 }
 
 /** Mensagem enviada pela recepção no app WhatsApp Business (smb_message_echoes). */

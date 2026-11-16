@@ -20,6 +20,7 @@ import { MetaSyncService } from './modules/meta/MetaSyncService.js';
 import { MetricsService } from './modules/metrics/MetricsService.js';
 import { WebhookIngestionService } from './modules/whatsapp/WebhookIngestionService.js';
 import { WhatsAppEventProcessor } from './modules/whatsapp/WhatsAppEventProcessor.js';
+import { ConfirmationService } from './modules/whatsapp/ConfirmationService.js';
 import { PostgresJobQueue } from './queue/PostgresJobQueue.js';
 import { FetchHttpClient } from './shared/http.js';
 import { systemClock } from './shared/ids.js';
@@ -53,8 +54,10 @@ export function buildContainer(env: Env) {
   });
   const metaSync = new MetaSyncService(repos, vault, http, clock, integrationEnv, env.META_GRAPH_VERSION, engine);
   const adsManager = new AdsManagerService(repos, vault, http, integrationEnv, env.META_GRAPH_VERSION, metrics);
+  const confirmations = new ConfirmationService(repos, integrations, funnel, clock);
+  processor.buttonHandler = (evt) => confirmations.handleButton(evt);
 
-  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, recalls, auth, audit, ingestion, processor, integrations, metaSync, adsManager };
+  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, recalls, auth, audit, ingestion, processor, integrations, metaSync, adsManager, confirmations };
 }
 
 export type Container = ReturnType<typeof buildContainer>;

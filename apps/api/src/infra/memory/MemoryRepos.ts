@@ -330,6 +330,13 @@ export class MemoryRepos implements Repos {
     listCreatedIn: async (r: DateRange) => clone([...this.s.appointments.values()].filter((a) => inRange(a.createdAt, r))),
     listScheduledBetween: async (r: DateRange) =>
       clone([...this.s.appointments.values()].filter((a) => inRange(a.scheduledFor, r))),
+    claimConfirmation: async (id: string, at: Date) => {
+      const a = this.s.appointments.get(id);
+      if (!a || a.confirmationSentAt) return false;
+      a.confirmationSentAt = at;
+      a.confirmationError = null;
+      return true;
+    },
   };
 
   sales = {

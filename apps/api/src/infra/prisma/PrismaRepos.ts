@@ -335,6 +335,8 @@ export class PrismaRepos implements Repos {
     listCreatedIn: async (r: DateRange) => as<any>(await this.db.appointment.findMany({ where: { createdAt: inRange(r) } })),
     listScheduledBetween: async (r: DateRange) =>
       as<any>(await this.db.appointment.findMany({ where: { scheduledFor: inRange(r) }, orderBy: { scheduledFor: 'asc' } })),
+    claimConfirmation: async (id: string, at: Date) =>
+      (await this.db.appointment.updateMany({ where: { id, confirmationSentAt: null }, data: { confirmationSentAt: at, confirmationError: null } })).count === 1,
   };
 
   sales = {

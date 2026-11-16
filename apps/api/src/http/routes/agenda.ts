@@ -127,6 +127,8 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
         status: a.status,
         cancelReason: a.cancelReason,
         patientResponse: a.patientResponse ?? null,
+        confirmationSentAt: a.confirmationSentAt ?? null,
+        confirmationError: a.confirmationError ?? null,
         patientResponseAt: a.patientResponseAt ?? null,
         patientNote: a.patientNote ?? null,
       });

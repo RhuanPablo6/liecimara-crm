@@ -34,12 +34,99 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+const TEMPLATE_STATUS: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' | 'secondary' }> = {
+  APPROVED: { label: 'Aprovado pela Meta', variant: 'success' },
+  PENDING: { label: 'Em análise na Meta', variant: 'warning' },
+  IN_APPEAL: { label: 'Em recurso', variant: 'warning' },
+  REJECTED: { label: 'Recusado', variant: 'danger' },
+  PAUSED: { label: 'Pausado', variant: 'danger' },
+  DISABLED: { label: 'Desativado', variant: 'danger' },
+};
+
+/** Confirmação automática de agendamento com botões (YCloud). */
+function ConfirmationsCard() {
+  const { data, reload } = useApi<any>('/whatsapp/confirmations');
+  const act = useAction();
+  if (!data) return null;
+  const tpl = data.template ? (TEMPLATE_STATUS[data.template.status] ?? { label: data.template.status, variant: 'secondary' as const }) : null;
+  const approved = data.template?.status === 'APPROVED';
+  const save = (patch: object) => act.run(async () => (await api('/whatsapp/confirmations/settings', { method: 'PUT', body: patch }), await reload()));
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between gap-2">
+          Confirmação de agendamento pelo WhatsApp
+          {tpl ? <Badge variant={tpl.variant}>{tpl.label}</Badge> : <Badge variant="secondary">Modelo não criado</Badge>}
+        </CardTitle>
+        <CardDescription>
+          Na véspera, a paciente recebe a mensagem com os botões <b>Confirmar</b>, <b>Remarcar</b> e <b>Desmarcar</b>. O toque dela atualiza a Agenda
+          na hora e ela recebe uma resposta automática.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <div className="rounded-md border bg-secondary/40 p-3">
+          <p className="whitespace-pre-wrap">{data.body.replace('{{1}}', 'Mariana').replace('{{2}}', 'Clínica Dra. Liecimara Esteves').replace('{{3}}', 'Botox').replace('{{4}}', '18/11').replace('{{5}}', '14:00')}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {data.buttons.map((b: string) => (
+              <span key={b} className="rounded-full border bg-background px-3 py-1 text-xs font-medium text-navy-700">
+                {b}
+              </span>
+            ))}
+          </div>
+        </div>
+        {data.template?.reason && <p className="text-red-700">Motivo da recusa: {data.template.reason}</p>}
+        {data.templateError && <p className="text-red-700">{data.templateError}</p>}
+        {!data.template && (
+          <Button disabled={act.busy} onClick={() => act.run(async () => (await api('/whatsapp/confirmations/template', { method: 'POST' }), await reload()))}>
+            Enviar modelo para aprovação da Meta
+          </Button>
+        )}
+        {data.template && !approved && <p className="text-muted-foreground">A Meta costuma aprovar em minutos, às vezes em até 24 h. Atualize esta página para ver.</p>}
+        <div className="flex flex-wrap items-center gap-4 border-t pt-4">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              className="size-4 accent-navy-700"
+              checked={data.settings.enabled}
+              disabled={act.busy || !approved}
+              onChange={(e) => save({ enabled: e.target.checked })}
+            />
+            Enviar automaticamente na véspera
+          </label>
+          <label className="flex items-center gap-2">
+            a partir das
+            <select
+              className="h-8 rounded-md border bg-background px-2"
+              value={data.settings.sendHour}
+              disabled={act.busy}
+              onChange={(e) => save({ sendHour: Number(e.target.value) })}
+            >
+              {Array.from({ length: 11 }, (_, i) => i + 8).map((h) => (
+                <option key={h} value={h}>
+                  {h}h
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {!approved && <p className="text-xs text-muted-foreground">O envio automático libera quando o modelo estiver aprovado.</p>}
+        <p className="text-xs text-muted-foreground">
+          Também dá para enviar na hora, por agendamento, no botão “Enviar confirmação pelo WhatsApp” da Agenda. Cada confirmação custa cerca de R$ 0,04
+          (tarifa da Meta).
+        </p>
+        <ErrorText>{act.error}</ErrorText>
+      </CardContent>
+    </Card>
+  );
+}
+
 function WhatsAppPanel() {
   const { data, reload } = useApi('/integrations/whatsapp');
   const { data: events, reload: reloadEvents } = useApi<any[]>('/integrations/events?limit=30');
   const act = useAction();
   const [form, setForm] = useState({ wabaId: '', phoneNumberId: '', accessToken: '', coexistence: true });
-  const [d360Key, setD360Key] = useState('');
+  const [ycKey, setYcKey] = useState('');
+  const [ycConfirm, setYcConfirm] = useState(false);
 
   if (!data) return <p className="text-muted-foreground">Carregando…</p>;
   const run = (fn: () => Promise<unknown>) => act.run(async () => (await fn(), await reload(), await reloadEvents()));
@@ -52,33 +139,41 @@ function WhatsAppPanel() {
         recebe eventos e consulta dados. A vinculação do número de produção exige confirmação do administrador.
       </div>
 
-      {!data.connections.some((c: any) => c.provider === 'WHATSAPP_COEXISTENCE_PARTNER') && (
-        <Card>
+      {!data.connections.some((c: any) => c.partnerName === 'YCloud') && (
+        <Card className="border-emerald-300">
           <CardHeader>
-            <CardTitle>Conectar via 360dialog (coexistência)</CardTitle>
+            <CardTitle>Conectar via YCloud (coexistência, plano grátis)</CardTitle>
             <CardDescription>
-              Depois de conectar o número no Hub da 360dialog, cole aqui a API key do número. O CRM registra o webhook na 360dialog
-              e passa a receber as mensagens. A clínica continua atendendo pelo app WhatsApp Business.
+              Depois de conectar o número no YCloud (Coexistência do aplicativo WhatsApp Business), crie uma API Key em Desenvolvedor → API Keys e
+              cole aqui. O CRM encontra o número, cria o webhook sozinho e passa a receber as mensagens. A clínica continua atendendo pelo app.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Field label="API key da 360dialog">
-              <Input type="password" autoComplete="off" value={d360Key} onChange={(e) => setD360Key(e.target.value)} />
+            <Field label="API Key do YCloud">
+              <Input type="password" autoComplete="off" value={ycKey} onChange={(e) => setYcKey(e.target.value)} />
             </Field>
+            {data.environment === 'PRODUCTION' && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" className="size-4 accent-navy-700" checked={ycConfirm} onChange={(e) => setYcConfirm(e.target.checked)} />
+                Confirmo que este é o número oficial da clínica
+              </label>
+            )}
             <Button
-              disabled={act.busy || d360Key.trim().length < 8}
+              disabled={act.busy || ycKey.trim().length < 8 || (data.environment === 'PRODUCTION' && !ycConfirm)}
               onClick={() =>
                 run(async () => {
-                  await api('/integrations/whatsapp/360dialog', { method: 'POST', body: { apiKey: d360Key } });
-                  setD360Key('');
+                  await api('/integrations/whatsapp/ycloud', { method: 'POST', body: { apiKey: ycKey, confirmProductionNumber: ycConfirm || undefined } });
+                  setYcKey('');
                 })
               }
             >
-              Conectar 360dialog
+              Conectar YCloud
             </Button>
           </CardContent>
         </Card>
       )}
+
+      {data.connections.some((c: any) => c.partnerName === 'YCloud') && <ConfirmationsCard />}
 
       {data.connections.length === 0 && (
         <Card>
@@ -117,7 +212,7 @@ function WhatsAppPanel() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                  {c.provider === 'WHATSAPP_CLOUD_API' ? 'WhatsApp Cloud API' : 'Parceiro de coexistência'}
+                  {c.provider === 'WHATSAPP_CLOUD_API' ? 'WhatsApp Cloud API' : `WhatsApp · ${c.partnerName ?? 'parceiro oficial'} (coexistência)`}
                   <Badge variant={st.variant}>{st.label}</Badge>
                 </CardTitle>
               </CardHeader>

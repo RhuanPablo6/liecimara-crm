@@ -230,6 +230,10 @@ export interface Appointment {
   patientResponseAt?: Date | null;
   patientNote?: string | null;
   rescheduleHandled?: boolean;
+  /** Confirmação enviada pelo WhatsApp com botões. */
+  confirmationSentAt?: Date | null;
+  confirmationMessageId?: string | null;
+  confirmationError?: string | null;
   status: AppointmentStatus;
   cancelReason: string | null;
   createdById: string | null;

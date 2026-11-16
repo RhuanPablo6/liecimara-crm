@@ -6,13 +6,13 @@ export interface HttpResponse {
 }
 
 export interface HttpClient {
-  request(url: string, init: { method: 'GET' | 'POST' | 'DELETE'; headers?: Record<string, string>; body?: unknown }): Promise<HttpResponse>;
+  request(url: string, init: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; headers?: Record<string, string>; body?: unknown }): Promise<HttpResponse>;
 }
 
 export class FetchHttpClient implements HttpClient {
   constructor(private readonly timeoutMs = 20_000) {}
 
-  async request(url: string, init: { method: 'GET' | 'POST' | 'DELETE'; headers?: Record<string, string>; body?: unknown }): Promise<HttpResponse> {
+  async request(url: string, init: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; headers?: Record<string, string>; body?: unknown }): Promise<HttpResponse> {
     const res = await fetch(url, {
       method: init.method,
       headers: { 'content-type': 'application/json', ...init.headers },

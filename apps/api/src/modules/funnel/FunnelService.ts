@@ -203,7 +203,13 @@ export class FunnelService {
    * Resposta da paciente pelo link da mensagem. Confirmar → confirmado; desmarcar → cancelado;
    * remarcar → libera o horário (cancelado) e entra em "pedidos de remarcação" para a recepção.
    */
-  async patientRespond(appointmentId: string, action: 'CONFIRM' | 'CANCEL' | 'RESCHEDULE', note: string | null): Promise<Appointment> {
+  async patientRespond(
+    appointmentId: string,
+    action: 'CONFIRM' | 'CANCEL' | 'RESCHEDULE',
+    note: string | null,
+    channel: 'link' | 'whatsapp' = 'link',
+  ): Promise<Appointment> {
+    const via = channel === 'whatsapp' ? 'pelo WhatsApp' : 'pelo link';
     const actor = { id: 'paciente' };
     const appt = await this.repos.appointments.findById(appointmentId);
     if (!appt) throw new NotFoundError('Agendamento', appointmentId);
@@ -217,8 +223,8 @@ export class FunnelService {
     } else {
       const reason =
         action === 'CANCEL'
-          ? `Paciente desmarcou pelo link${clean ? `: ${clean}` : ''}`
-          : `Paciente pediu para remarcar pelo link${clean ? `: ${clean}` : ''}`;
+          ? `Paciente desmarcou ${via}${clean ? `: ${clean}` : ''}`
+          : `Paciente pediu para remarcar ${via}${clean ? `: ${clean}` : ''}`;
       await this.cancelAppointment(appointmentId, reason, actor);
     }
     const updated = await this.repos.appointments.update(appointmentId, {
@@ -249,6 +255,8 @@ export class FunnelService {
         ...(input.procedureId !== undefined ? { procedureId: input.procedureId } : {}),
         ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
         ...(moved && appt.status === 'CONFIRMED' ? { status: 'SCHEDULED' as const } : {}),
+        // Novo horário: a confirmação pelo WhatsApp vale para o horário novo.
+        ...(moved ? { confirmationSentAt: null, confirmationMessageId: null, confirmationError: null } : {}),
       };
       const updated = await r.appointments.update(appointmentId, patch);
       await r.audit.log({

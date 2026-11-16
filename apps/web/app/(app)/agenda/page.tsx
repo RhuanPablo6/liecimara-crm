@@ -64,6 +64,8 @@ type Appt = {
   patientResponse: string | null;
   patientResponseAt: string | null;
   patientNote: string | null;
+  confirmationSentAt?: string | null;
+  confirmationError?: string | null;
 };
 
 type Block = { id: string; startAt: string; endAt: string; allDay: boolean; reason: string; note: string | null };
@@ -286,7 +288,7 @@ function BlockDetails({ b, onDone }: { b: Block; onDone: (changed: boolean) => v
   );
 }
 
-const RESPONSE: Record<string, string> = { CONFIRMED: 'Confirmou pelo link', CANCELED: 'Desmarcou pelo link', RESCHEDULE: 'Pediu para remarcar' };
+const RESPONSE: Record<string, string> = { CONFIRMED: 'Paciente confirmou', CANCELED: 'Paciente desmarcou', RESCHEDULE: 'Paciente pediu para remarcar' };
 
 /** Agendamentos que se sobrepõem ficam lado a lado. */
 function layout(list: Appt[]) {
@@ -515,6 +517,41 @@ function NewAppointment({
   );
 }
 
+// ── Confirmação pelo WhatsApp (YCloud) ────────────────────────
+
+function WhatsAppConfirm({ a, onDone }: { a: Appt; onDone: (changed: boolean) => void }) {
+  const { data } = useApi<any>('/whatsapp/confirmations');
+  const { busy, error, run } = useAction();
+  if (!data?.connected || data.template?.status !== 'APPROVED') return null;
+  const sent = a.confirmationSentAt;
+  return (
+    <div className="space-y-1 rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-emerald-900">
+          {sent
+            ? `Confirmação com botões enviada em ${new Date(sent).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+            : 'Confirmação com botões ainda não enviada'}
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              await api(`/appointments/${a.id}/whatsapp-confirmation`, { method: 'POST', body: { force: !!sent } });
+              onDone(true);
+            })
+          }
+        >
+          <Check /> {sent ? 'Reenviar' : 'Enviar confirmação pelo WhatsApp'}
+        </Button>
+      </div>
+      {a.confirmationError && !sent && <p className="text-xs text-red-700">Último envio falhou: {a.confirmationError}</p>}
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
 // ── Detalhes / ações ──────────────────────────────────────────
 
 function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt; appts: Appt[]; blocks: Block[]; procedures: any[]; onDone: (changed: boolean) => void }) {
@@ -606,6 +643,7 @@ function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt;
           </Button>
         </div>
       )}
+      {open && !editing && !canceling && <WhatsAppConfirm a={a} onDone={onDone} />}
       {open && !editing && !canceling && (
         <MessageButton
           waId={a.waId}
@@ -887,7 +925,7 @@ export default function AgendaPage() {
 
       {responses && responses.length > 0 && (
         <div className="rounded-lg border bg-background">
-          <p className="border-b px-4 py-2 text-sm font-medium text-navy-800">Respostas das pacientes pelo link</p>
+          <p className="border-b px-4 py-2 text-sm font-medium text-navy-800">Respostas das pacientes (link ou WhatsApp)</p>
           <div className="divide-y">
             {responses.map((r) => (
               <div key={r.id} className={cn('flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-sm', r.pending && 'bg-amber-50')}>
