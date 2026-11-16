@@ -246,6 +246,7 @@ export interface QuoteRepo {
   update(id: string, data: Partial<Omit<Quote, 'id' | 'number' | 'createdAt'>>): Promise<Quote>;
   findById(id: string): Promise<Quote | null>;
   list(filter: { contactId?: string; from?: Date; to?: Date }): Promise<Quote[]>;
+  delete(id: string): Promise<void>;
 }
 
 export interface AgendaBlockRepo {

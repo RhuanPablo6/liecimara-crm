@@ -163,6 +163,24 @@ export class QuoteService {
     return { quote: updated, saleIds, leadId };
   }
 
+  /** Apaga de vez (orçamento de teste ou feito errado). Se já virou venda, apaga também essas vendas e pagamentos. */
+  async purge(id: string, actor: Actor) {
+    const q = await this.get(id);
+    const removedSales: string[] = [];
+    for (const saleId of q.saleIds ?? []) {
+      const sale = await this.repos.sales.findById(saleId);
+      if (!sale) continue;
+      if (sale.status === 'ACTIVE') await this.funnel.cancelSale(saleId, 'orçamento apagado', actor);
+      const payments = await this.repos.payments.listBySale(saleId);
+      await this.repos.purge.sale(saleId);
+      await this.repos.audit.log({ userId: actor.id, action: 'sale.purge', entityType: 'Sale', entityId: saleId, before: { ...sale, payments }, ip: actor.ip });
+      removedSales.push(saleId);
+    }
+    await this.repos.quotes.delete(id);
+    await this.repos.audit.log({ userId: actor.id, action: 'quote.purge', entityType: 'Quote', entityId: id, before: q, ip: actor.ip });
+    return { ok: true, removedSales: removedSales.length };
+  }
+
   async view(q: Quote) {
     const contact = await this.repos.contacts.findById(q.contactId);
     const procs = new Map((await this.repos.procedures.list()).map((p) => [p.id, p.name]));

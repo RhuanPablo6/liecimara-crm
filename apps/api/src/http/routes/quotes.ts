@@ -90,6 +90,12 @@ export function registerQuoteRoutes(app: FastifyInstance, c: Container, guard: G
     return { ...(await full(id)), leadId: r.leadId, saleIds: r.saleIds };
   });
 
+  app.post('/quotes/:id/purge', { preHandler: guard('records:delete') }, async (req) => {
+    const { id } = idParam.parse(req.params);
+    z.object({ confirm: z.literal('APAGAR') }).parse(req.body);
+    return c.quotes.purge(id, actorOf(req));
+  });
+
   // Página pública: só o primeiro nome da paciente, itens e valores.
   app.get('/public/quotes/:token', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
     const { token } = z.object({ token: z.string().min(10).max(120) }).parse(req.params);

@@ -2,9 +2,11 @@
 
 import { ArrowLeft, Check, Copy, MessageCircle, Pencil, Printer, RotateCcw, ShoppingBag, X } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { ConfirmButton } from '@/components/confirm-button';
 import { useMe } from '@/components/access';
+import { PurgeButton } from '@/components/purge-dialog';
 import { QuoteDocument, QuoteStatusBadge, quoteNumber } from '@/components/quotes/quote-document';
 import { QuoteEditor } from '@/components/quotes/quote-editor';
 import { Button } from '@/components/ui/button';
@@ -19,6 +21,7 @@ export default function QuotePage({ params }: { params: Promise<{ id: string }> 
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const me = useMe();
+  const router = useRouter();
   const canSell = !!me?.permissions.includes('sales:write');
 
   if (loadError) return <ErrorText>{loadError}</ErrorText>;
@@ -100,6 +103,24 @@ export default function QuotePage({ params }: { params: Promise<{ id: string }> 
               <RotateCcw /> Reabrir
             </Button>
           )}
+          <PurgeButton
+            endpoint={`/quotes/${id}/purge`}
+            title="Excluir orçamento"
+            label="Excluir"
+            description={
+              <>
+                <p>
+                  O orçamento nº {quoteNumber(q.number)} de {q.patient?.name ?? 'paciente'} será apagado de vez e sai do histórico da paciente.
+                </p>
+                {converted && (
+                  <p className="font-medium text-red-700">
+                    Ele já virou venda: as {q.saleIds.length} venda(s) lançada(s) por ele e os pagamentos delas também serão apagados.
+                  </p>
+                )}
+              </>
+            }
+            onDone={() => router.push('/orcamentos')}
+          />
         </div>
         <ErrorText>{error}</ErrorText>
 

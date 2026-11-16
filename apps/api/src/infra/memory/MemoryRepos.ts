@@ -458,6 +458,9 @@ export class MemoryRepos implements Repos {
     },
     update: async (id: string, d: Partial<Quote>) => patch(this.s.quotes, id, { ...d, updatedAt: new Date() }),
     findById: async (id: string) => clone(this.s.quotes.get(id) ?? null),
+    delete: async (id: string) => {
+      this.s.quotes.delete(id);
+    },
     list: async (f: { contactId?: string; from?: Date; to?: Date }) =>
       clone(
         [...this.s.quotes.values()]

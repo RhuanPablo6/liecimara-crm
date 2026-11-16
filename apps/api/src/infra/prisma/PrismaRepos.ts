@@ -455,6 +455,9 @@ export class PrismaRepos implements Repos {
         }),
       ),
     findById: async (id: string) => as<any>(await this.db.quote.findUnique({ where: { id } })),
+    delete: async (id: string) => {
+      await this.db.quote.delete({ where: { id } });
+    },
     list: async (f: { contactId?: string; from?: Date; to?: Date }) =>
       as<any>(
         await this.db.quote.findMany({

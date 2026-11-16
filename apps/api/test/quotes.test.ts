@@ -39,6 +39,12 @@ describe('Orçamentos', () => {
     await assert.rejects(() => w.quotes.convertToSales(q.id, actor), /já foram lançadas/);
     await assert.rejects(() => w.quotes.update(q.id, { items: q.items, validUntil: q.validUntil }, actor), /em aberto/);
     await assert.rejects(() => w.quotes.setStatus(q.id, 'OPEN', actor), /virou venda/);
+
+    const del = await w.quotes.purge(q.id, actor);
+    assert.equal(del.removedSales, 2);
+    assert.equal(await w.repos.quotes.findById(q.id), null);
+    assert.equal(await w.repos.sales.findById(r.saleIds[0]!), null);
+    assert.notEqual((await w.repos.leads.findById(lead.id))!.stage, 'WON');
   });
 
   it('cria paciente nova, vence pela validade e valida o link público', async () => {
