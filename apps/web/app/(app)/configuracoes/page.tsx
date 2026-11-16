@@ -382,7 +382,7 @@ function MetaPanel() {
           <CardTitle className="flex items-center justify-between">
             Meta Marketing API <Badge variant={st.variant}>{st.label}</Badge>
           </CardTitle>
-          <CardDescription>Campanhas, anúncios e investimento (somente leitura, escopo ads_read).</CardDescription>
+          <CardDescription>Campanhas, anúncios e investimento. Leitura com ads_read; ativar, pausar e mudar orçamento pelo CRM exige ads_management.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="divide-y">
