@@ -12,6 +12,7 @@ import { ErrorText, Field, Input, NativeSelect } from '@/components/ui/form';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { api, useAction, useApi } from '@/lib/api';
 import { PatientTagBadge } from '@/components/patient-tag';
+import { AgendaPatientDialog } from '@/components/agenda-patient-dialog';
 import { Badge } from '@/components/ui/badge';
 import { ORGANIC_ORIGINS, ORIGIN_NOTE_HINT } from '@/lib/origins';
 import { dateTime, phone } from '@/lib/format';
@@ -151,7 +152,7 @@ export default function LeadsPage() {
     if (search.length >= 2) p.set('search', search);
     return p.toString();
   }, [stage, confidence, search, page]);
-  const { data, loading } = useApi<{ total: number; items: any[] }>(`/leads?${qs}`);
+  const { data, loading, reload } = useApi<{ total: number; items: any[] }>(`/leads?${qs}`);
 
   return (
     <div className="space-y-6">
@@ -160,7 +161,10 @@ export default function LeadsPage() {
           <h1 className="text-3xl font-semibold text-navy-800">Leads</h1>
           <p className="text-sm text-muted-foreground">{data ? `${data.total} leads` : 'Carregando…'}</p>
         </div>
-        <NewLeadDialog />
+        <div className="flex flex-wrap gap-2">
+          <AgendaPatientDialog onSaved={() => void reload()} />
+          <NewLeadDialog />
+        </div>
       </div>
 
       <Card>

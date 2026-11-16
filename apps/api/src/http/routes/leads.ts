@@ -108,6 +108,15 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
         // Origem que não é anúncio (indicação, Instagram...) e etiqueta "da carteira".
         origin: z.object({ type: z.enum(ORGANIC_KEYS as [string, ...string[]]), note: z.string().max(200).nullish() }).nullish(),
         walletPatient: z.boolean().nullish(),
+        // Paciente que já estava na agenda antes do CRM: o horário entra junto, já vinculado.
+        appointment: z
+          .object({
+            scheduledFor: z.coerce.date(),
+            durationMin: z.number().int().min(5).max(600).default(60),
+            procedureId: z.string().min(1).nullish(),
+            notes: z.string().max(500).nullish(),
+          })
+          .nullish(),
       })
       .parse(req.body);
     let attribution: { adMetaId: string; note: string } | null = null;
@@ -124,12 +133,38 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
     } else if (b.adMetaId) {
       attribution = { adMetaId: b.adMetaId, note: 'Anúncio informado pela recepção no cadastro do lead' };
     }
-    const lead = await c.funnel.createLeadManually(
-      { waId: b.waId, name: b.name, procedureInterestId: b.procedureInterestId, attribution, origin: (b.origin as any) ?? null },
-      actorOf(req),
-    );
+    const actor = actorOf(req);
+    const procedureInterestId = b.procedureInterestId ?? b.appointment?.procedureId ?? null;
+    let lead;
+    let existing = false;
+    try {
+      lead = await c.funnel.createLeadManually(
+        { waId: b.waId, name: b.name, procedureInterestId, attribution, origin: (b.origin as any) ?? null },
+        actor,
+      );
+    } catch (e) {
+      // Já tem atendimento em aberto: com horário informado, só acrescenta o agendamento nele.
+      if (!(e instanceof DomainError && e.code === 'LEAD_ALREADY_OPEN' && b.appointment)) throw e;
+      const contact = await c.repos.contacts.findByWaId(b.waId.replace(/\D/g, ''));
+      lead = (await c.repos.leads.findOpenByContact(contact!.id))!;
+      existing = true;
+    }
     if (b.walletPatient != null) await c.repos.contacts.update(lead.contactId, { walletPatient: b.walletPatient });
-    return lead;
+    let appointment = null;
+    if (b.appointment) {
+      appointment = await c.funnel.scheduleAppointment(
+        lead.id,
+        {
+          scheduledFor: b.appointment.scheduledFor,
+          durationMin: b.appointment.durationMin,
+          procedureId: b.appointment.procedureId ?? null,
+          notes: b.appointment.notes ?? null,
+        },
+        actor,
+      );
+      lead = (await c.repos.leads.findById(lead.id))!;
+    }
+    return { ...lead, appointment, existing };
   });
 
   app.get('/leads/:id', { preHandler: guard('leads:read') }, async (req) => {
