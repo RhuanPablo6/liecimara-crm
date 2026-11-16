@@ -246,6 +246,15 @@ export interface AgendaBlockRepo {
   delete(id: string): Promise<void>;
 }
 
+/** Exclusão definitiva (lead de teste, lançamento errado). */
+export interface PurgeRepo {
+  /** Apaga o lead e tudo dele; o contato também, se não tiver outro lead nem mensagens. */
+  lead(leadId: string): Promise<{ contactDeleted: boolean; appointments: number; sales: number; payments: number }>;
+  appointment(id: string): Promise<void>;
+  /** Apaga a venda, seus pagamentos e o "realizado" ligado a ela. */
+  sale(id: string): Promise<void>;
+}
+
 export interface AuditRepo {
   log(entry: AuditEntry): Promise<void>;
   list(filter: { entityType?: string; entityId?: string; limit?: number }): Promise<
@@ -276,6 +285,7 @@ export interface Repos {
   settings: SettingRepo;
   recalls: RecallActionRepo;
   agendaBlocks: AgendaBlockRepo;
+  purge: PurgeRepo;
   /** Executa `fn` em transação. */
   tx<T>(fn: (r: Repos) => Promise<T>): Promise<T>;
 }

@@ -330,6 +330,56 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
     return c.funnel.reopenAppointment(p.id, actorOf(req));
   });
 
+  // ---------- Exclusão definitiva (só administrador) ----------
+
+  const confirmBody = z.object({ confirm: z.literal('APAGAR', { errorMap: () => ({ message: 'Digite APAGAR para confirmar' }) }) });
+
+  /** Lead de teste ou cadastrado por engano: some de tudo (agenda, financeiro, relatórios). */
+  app.post('/leads/:id/purge', { preHandler: guard('records:delete') }, async (req) => {
+    const p = id.parse(req.params);
+    confirmBody.parse(req.body);
+    return c.repos.tx(async (r) => {
+      const lead = await r.leads.findById(p.id);
+      if (!lead) throw new DomainError('NOT_FOUND', 'Lead não encontrado', 404);
+      const contact = await r.contacts.findById(lead.contactId);
+      const res = await r.purge.lead(p.id);
+      await r.audit.log({
+        userId: req.user!.sub,
+        action: 'lead.purge',
+        entityType: 'Lead',
+        entityId: p.id,
+        before: { name: contact?.name ?? null, waId: contact?.waId ?? null, stage: lead.stage },
+        after: res,
+        ip: req.ip,
+      });
+      return res;
+    });
+  });
+
+  app.post('/appointments/:id/purge', { preHandler: guard('records:delete') }, async (req) => {
+    const p = id.parse(req.params);
+    confirmBody.parse(req.body);
+    const appt = await c.repos.appointments.findById(p.id);
+    if (!appt) throw new DomainError('NOT_FOUND', 'Agendamento não encontrado', 404);
+    // Cancela antes (acerta a etapa do lead) e depois apaga.
+    if (appt.status === 'SCHEDULED' || appt.status === 'CONFIRMED') await c.funnel.cancelAppointment(p.id, 'apagado', actorOf(req));
+    await c.repos.purge.appointment(p.id);
+    await c.audit.record({ userId: req.user!.sub, action: 'appointment.purge', entityType: 'Appointment', entityId: p.id, before: appt, ip: req.ip });
+    return { ok: true };
+  });
+
+  app.post('/sales/:id/purge', { preHandler: guard('records:delete') }, async (req) => {
+    const p = id.parse(req.params);
+    confirmBody.parse(req.body);
+    const sale = await c.repos.sales.findById(p.id);
+    if (!sale) throw new DomainError('NOT_FOUND', 'Venda não encontrada', 404);
+    if (sale.status === 'ACTIVE') await c.funnel.cancelSale(p.id, 'apagada', actorOf(req));
+    const payments = await c.repos.payments.listBySale(p.id);
+    await c.repos.purge.sale(p.id);
+    await c.audit.record({ userId: req.user!.sub, action: 'sale.purge', entityType: 'Sale', entityId: p.id, before: { ...sale, payments }, ip: req.ip });
+    return { ok: true };
+  });
+
   app.post('/leads/:id/reminders', { preHandler: guard('leads:write') }, async (req) => {
     const { id: leadId } = id.parse(req.params);
     const b = z.object({ dueAt: isoDate, note: z.string().min(2), assignedToId: z.string().nullish() }).parse(req.body);

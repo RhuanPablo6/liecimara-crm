@@ -50,3 +50,20 @@ describe('Correções', () => {
     assert.equal((await w.repos.leads.findById(lead.id))!.stage, 'WON');
   });
 });
+
+describe('Exclusão definitiva', () => {
+  it('apaga lead de teste com agenda, venda e pagamento; contato sem conversa some junto', async () => {
+    const w = buildWorld('2026-11-15T15:00:00.000Z');
+    const botox = await seedProcedure(w, 'Botox');
+    const lead = await w.funnel.createLeadManually({ waId: '5511900000009', name: 'Teste' }, actor);
+    await w.funnel.scheduleAppointment(lead.id, { scheduledFor: new Date('2026-11-18T13:00:00Z') }, actor);
+    const sale = await w.funnel.registerSale(lead.id, { procedureId: botox.id, amountCents: 90000 }, actor);
+    await w.funnel.registerPayment(sale.id, { amountCents: 30000, method: 'PIX' }, actor);
+    const res = await w.repos.purge.lead(lead.id);
+    assert.deepEqual(res, { contactDeleted: true, appointments: 1, sales: 1, payments: 1 });
+    assert.equal(await w.repos.leads.findById(lead.id), null);
+    assert.equal(await w.repos.sales.findById(sale.id), null);
+    assert.equal((await w.repos.payments.listBySale(sale.id)).length, 0);
+    assert.equal(await w.repos.contacts.findByWaId('5511900000009'), null);
+  });
+});

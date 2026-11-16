@@ -20,6 +20,8 @@ export type Permission =
   | 'finance:write'
   | 'ads:manage'
   | 'messages:manage'
+  /** Apagar de vez (lead de teste, lançamento errado). Só administrador. */
+  | 'records:delete'
   | 'app:use';
 
 const MATRIX: Record<Role, readonly Permission[]> = {
@@ -42,6 +44,7 @@ const MATRIX: Record<Role, readonly Permission[]> = {
     'finance:write',
     'ads:manage',
     'messages:manage',
+    'records:delete',
     'app:use',
   ],
   MANAGER: [

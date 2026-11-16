@@ -401,6 +401,46 @@ export class MemoryRepos implements Repos {
     list: async () => clone([...this.s.recalls.values()].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())),
   };
 
+  purge = {
+    lead: async (leadId: string) => {
+      const lead = this.s.leads.get(leadId);
+      if (!lead) throw new NotFoundError('Lead', leadId);
+      const drop = <T extends { id: string }>(m: Map<string, T>, pred: (v: T) => boolean) => {
+        let n = 0;
+        for (const [k, v] of m) if (pred(v)) (m.delete(k), n++);
+        return n;
+      };
+      const saleIds = new Set([...this.s.sales.values()].filter((s) => s.leadId === leadId).map((s) => s.id));
+      const payments = drop(this.s.payments, (p) => saleIds.has(p.saleId));
+      drop(this.s.performed, (p) => p.leadId === leadId);
+      drop(this.s.sales, (s) => s.leadId === leadId);
+      const appointments = drop(this.s.appointments, (a) => a.leadId === leadId);
+      drop(this.s.reminders, (r) => r.leadId === leadId);
+      drop(this.s.stageHistory, (h) => h.leadId === leadId);
+      drop(this.s.evidence, (e) => e.leadId === leadId);
+      this.s.leads.delete(leadId);
+      const others = [...this.s.leads.values()].some((l) => l.contactId === lead.contactId);
+      const msgs = [...this.s.messages.values()].some((m) => m.contactId === lead.contactId);
+      let contactDeleted = false;
+      if (!others && !msgs) {
+        drop(this.s.conversations, (c) => c.contactId === lead.contactId);
+        drop(this.s.evidence, (e) => e.contactId === lead.contactId);
+        drop(this.s.recalls, (r) => r.contactId === lead.contactId);
+        this.s.contacts.delete(lead.contactId);
+        contactDeleted = true;
+      }
+      return { contactDeleted, appointments, sales: saleIds.size, payments };
+    },
+    appointment: async (id: string) => {
+      if (!this.s.appointments.delete(id)) throw new NotFoundError('Agendamento', id);
+    },
+    sale: async (id: string) => {
+      for (const [k, p] of this.s.payments) if (p.saleId === id) this.s.payments.delete(k);
+      for (const [k, p] of this.s.performed) if (p.saleId === id) this.s.performed.delete(k);
+      if (!this.s.sales.delete(id)) throw new NotFoundError('Venda', id);
+    },
+  };
+
   agendaBlocks = {
     create: async (d: Omit<AgendaBlock, 'id' | 'createdAt'>) => insert(this.s.agendaBlocks, { ...d, createdAt: new Date() }, 'blk_'),
     listBetween: async (from: Date, to: Date) =>

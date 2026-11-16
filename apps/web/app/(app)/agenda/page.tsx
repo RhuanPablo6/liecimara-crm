@@ -13,6 +13,7 @@ import { phone } from '@/lib/format';
 import { ORGANIC_ORIGINS } from '@/lib/origins';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '@/components/confirm-button';
+import { PurgeButton } from '@/components/purge-dialog';
 
 type View = 'day' | 'week' | 'month';
 
@@ -714,6 +715,14 @@ function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt;
         <Link className="text-navy-600 hover:underline" href={`/leads/${a.leadId}`}>
           Atendimento (registrar venda)
         </Link>
+        <PurgeButton
+          className="ml-auto h-7 text-red-700"
+          endpoint={`/appointments/${a.id}/purge`}
+          title="Apagar agendamento"
+          label="Apagar"
+          description={<p>Este agendamento sai da Agenda e do histórico da paciente. Para apagar a paciente inteira (com vendas), use “Apagar lead” no atendimento.</p>}
+          onDone={() => onDone(true)}
+        />
       </div>
     </DialogContent>
   );

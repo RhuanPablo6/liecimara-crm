@@ -16,6 +16,7 @@ import { PatientTagControl } from '@/components/patient-tag';
 import { brl, date, dateTime, parseBRL, phone } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '@/components/confirm-button';
+import { PurgeButton } from '@/components/purge-dialog';
 
 const METHODS = [
   ['PIX', 'Pix'],
@@ -536,6 +537,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       {procName(a.procedureId)} · {a.status === 'CANCELED' ? `Cancelado: ${a.cancelReason}` : (APPT_LABEL[a.status] ?? a.status)}
                     </p>
                   </div>
+                  <PurgeButton
+                    endpoint={`/appointments/${a.id}/purge`}
+                    title="Apagar agendamento"
+                    description={<p>O agendamento de {dateTime(a.scheduledFor)} sai da Agenda e do histórico.</p>}
+                    onDone={() => void reload()}
+                  />
                   {a.status !== 'SCHEDULED' && (
                     <ConfirmButton
                       size="sm"
@@ -592,6 +599,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                           {date(s.soldAt)} · pago {brl(s.paidCents)} · <ConfidenceBadge value={s.attributionConfidence} />
                         </p>
                       </div>
+                      <PurgeButton
+                        endpoint={`/sales/${s.id}/purge`}
+                        title="Apagar venda"
+                        description={
+                          <p>
+                            A venda de {brl(s.amountCents)} ({procName(s.procedureId)}) e os pagamentos dela saem do Financeiro, de Contas a receber e dos relatórios.
+                          </p>
+                        }
+                        onDone={() => void reload()}
+                      />
                       {s.status === 'CANCELED' && (
                         <ConfirmButton size="sm" variant="outline" confirmLabel="Reativar a venda?" onConfirm={() => call(() => api(`/sales/${s.id}/reactivate`, { method: 'POST' }))}>
                           <Undo2 /> Desfazer cancelamento
@@ -732,6 +749,27 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             </CardContent>
           </Card>
+          <div className="flex justify-end">
+            <PurgeButton
+              endpoint={`/leads/${id}/purge`}
+              title="Apagar lead de vez"
+              label="Apagar lead (teste ou cadastro errado)"
+              description={
+                <>
+                  <p>
+                    Apaga <b>{contact?.name ?? contact?.profileName ?? phone(contact?.waId)}</b> e tudo deste atendimento:
+                  </p>
+                  <ul className="list-disc pl-5">
+                    <li>{appointments.length} agendamento(s) — saem da Agenda</li>
+                    <li>{sales.length} venda(s) e os pagamentos — saem do Financeiro e de Contas a receber</li>
+                    <li>lembretes e histórico de etapas</li>
+                  </ul>
+                  <p>Se o contato não tiver conversa pelo WhatsApp nem outro atendimento, ele também é apagado.</p>
+                </>
+              }
+              onDone={() => (window.location.href = '/leads')}
+            />
+          </div>
         </div>
       </div>
     </div>

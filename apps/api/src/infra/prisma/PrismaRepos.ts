@@ -409,6 +409,40 @@ export class PrismaRepos implements Repos {
       ),
   };
 
+  purge = {
+    lead: async (leadId: string) => {
+      const lead = await this.db.lead.findUnique({ where: { id: leadId } });
+      if (!lead) throw new NotFoundError('Lead', leadId);
+      const sales = await this.db.sale.findMany({ where: { leadId }, select: { id: true } });
+      const saleIds = sales.map((s) => s.id);
+      const payments = await this.db.payment.deleteMany({ where: { saleId: { in: saleIds } } });
+      await this.db.procedurePerformed.deleteMany({ where: { leadId } });
+      await this.db.sale.deleteMany({ where: { leadId } });
+      const appts = await this.db.appointment.deleteMany({ where: { leadId } });
+      await this.db.reminder.deleteMany({ where: { leadId } });
+      await this.db.leadStageHistory.deleteMany({ where: { leadId } });
+      await this.db.attributionEvidence.deleteMany({ where: { leadId } });
+      await this.db.lead.delete({ where: { id: leadId } });
+      const otherLeads = await this.db.lead.count({ where: { contactId: lead.contactId } });
+      const messages = await this.db.message.count({ where: { contactId: lead.contactId } });
+      let contactDeleted = false;
+      if (otherLeads === 0 && messages === 0) {
+        await this.db.conversation.deleteMany({ where: { contactId: lead.contactId } });
+        await this.db.attributionEvidence.deleteMany({ where: { contactId: lead.contactId } });
+        await this.db.recallAction.deleteMany({ where: { contactId: lead.contactId } });
+        await this.db.contact.delete({ where: { id: lead.contactId } });
+        contactDeleted = true;
+      }
+      return { contactDeleted, appointments: appts.count, sales: saleIds.length, payments: payments.count };
+    },
+    appointment: async (id: string) => void (await this.db.appointment.delete({ where: { id } })),
+    sale: async (id: string) => {
+      await this.db.payment.deleteMany({ where: { saleId: id } });
+      await this.db.procedurePerformed.deleteMany({ where: { saleId: id } });
+      await this.db.sale.delete({ where: { id } });
+    },
+  };
+
   agendaBlocks = {
     create: async (d: any) => as<any>(await this.db.agendaBlock.create({ data: d })),
     listBetween: async (from: Date, to: Date) =>
