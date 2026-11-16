@@ -22,6 +22,7 @@ export const SCREENS: Screen[] = [
   { key: 'relatorios', label: 'Relatórios', path: '/relatorios', group: 'Marketing', permissions: ['reports:read'] },
   { key: 'anuncios', label: 'Anúncios', path: '/anuncios', group: 'Marketing', permissions: ['reports:read', 'ads:manage', 'procedures:manage'] },
   { key: 'financeiro', label: 'Financeiro', path: '/financeiro', group: 'Financeiro', permissions: ['finance:read', 'finance:write', 'sales:write', 'payments:write', 'procedures:manage'] },
+  { key: 'precificacao', label: 'Precificação', path: '/precificacao', group: 'Financeiro', permissions: ['finance:read', 'finance:write', 'procedures:manage'] },
   { key: 'contas', label: 'Contas', path: '/contas', group: 'Financeiro', permissions: ['finance:read', 'finance:write', 'payments:write'] },
   { key: 'metas', label: 'Metas', path: '/metas', group: 'Financeiro', permissions: ['finance:read', 'finance:write'] },
   { key: 'compras', label: 'Compras', path: '/compras', group: 'Financeiro', permissions: ['purchases:read', 'purchases:write'] },
@@ -34,7 +35,7 @@ export const SCREEN_KEYS = SCREENS.map((s) => s.key);
 /** Modelos prontos para agilizar o cadastro. */
 export const SCREEN_PRESETS: Record<string, { label: string; screens: string[] }> = {
   reception: { label: 'Recepção', screens: ['painel', 'agenda', 'leads', 'orcamentos', 'pacientes', 'retornos', 'funil'] },
-  finance: { label: 'Financeiro', screens: ['financeiro', 'contas', 'metas', 'compras', 'despesas'] },
+  finance: { label: 'Financeiro', screens: ['financeiro', 'precificacao', 'contas', 'metas', 'compras', 'despesas'] },
   marketing: { label: 'Marketing', screens: ['painel', 'relatorios', 'anuncios', 'leads'] },
 };
 

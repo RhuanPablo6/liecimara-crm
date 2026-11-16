@@ -7,6 +7,7 @@ import { PatientsService } from '../src/modules/patients/PatientsService.js';
 import { RecallService } from '../src/modules/recalls/RecallService.js';
 import { FunnelService } from '../src/modules/funnel/FunnelService.js';
 import { QuoteService } from '../src/modules/quotes/QuoteService.js';
+import { PricingService } from '../src/modules/pricing/PricingService.js';
 import { MetricsService } from '../src/modules/metrics/MetricsService.js';
 import { MetaSyncService, META_SYNC_JOB } from '../src/modules/meta/MetaSyncService.js';
 import { AdsManagerService } from '../src/modules/meta/AdsManagerService.js';
@@ -49,6 +50,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
   const ingestion = new WebhookIngestionService(repos, queue, clock, 'HOMOLOG');
   const funnel = new FunnelService(repos, clock);
   const quotes = new QuoteService(repos, funnel, clock);
+  const pricing = new PricingService(repos, clock);
   const metrics = new MetricsService(repos);
   const finance = new FinanceService(repos);
   const accounts = new AccountsService(repos);
@@ -79,7 +81,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
     return ingestion.ingest(provider, raw, headers);
   }
 
-  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, finance, accounts, goals, patients, recalls, metaSync, adsManager, integrations, provider, worker, deliver, quotes };
+  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, finance, accounts, goals, patients, recalls, metaSync, adsManager, integrations, provider, worker, deliver, quotes, pricing };
 }
 
 export type World = ReturnType<typeof buildWorld>;
