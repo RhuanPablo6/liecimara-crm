@@ -1,3 +1,4 @@
+import { GraphApiError } from '../shared/http.js';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
@@ -58,6 +59,10 @@ export function buildServer(c: Container) {
     }
     if (err instanceof DomainError) {
       return reply.status(err.httpStatus).send({ error: err.code, message: err.message });
+    }
+    if (err instanceof GraphApiError) {
+      req.log.warn({ err }, 'erro do provedor externo');
+      return reply.status(502).send({ error: 'PROVIDER', message: err.userMessage ?? err.message });
     }
     req.log.error({ err }, 'erro não tratado');
     return reply.status((err as any).statusCode ?? 500).send({ error: 'INTERNAL', message: 'Erro interno' });

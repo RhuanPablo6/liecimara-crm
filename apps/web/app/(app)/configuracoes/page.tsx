@@ -65,7 +65,7 @@ function ConfirmationsCard() {
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="rounded-md border bg-secondary/40 p-3">
-          <p className="whitespace-pre-wrap">{data.body.replace('{{1}}', 'Mariana').replace('{{2}}', 'Clínica Dra. Liecimara Esteves').replace('{{3}}', 'Botox').replace('{{4}}', '18/11').replace('{{5}}', '14:00')}</p>
+          <p className="whitespace-pre-wrap">{data.body.replace('{{1}}', 'Mariana').replace('{{2}}', 'Botox').replace('{{3}}', '18/11').replace('{{4}}', '14:00')}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {data.buttons.map((b: string) => (
               <span key={b} className="rounded-full border bg-background px-3 py-1 text-xs font-medium text-navy-700">

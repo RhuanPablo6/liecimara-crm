@@ -102,7 +102,7 @@ describe('YCloud', () => {
     assert.equal(r2.sent, 0, 'não manda duas vezes');
     const sendReq = w.http.requests.find((r) => r.url.endsWith('/sendDirectly'))!;
     const tpl = (sendReq.init!.body as any).template;
-    assert.deepEqual(tpl.components[0].parameters.map((p: any) => p.text), ['Mariana', 'Clínica Dra. Liecimara Esteves', 'Botox', '18/11', '14:00']);
+    assert.deepEqual(tpl.components[0].parameters.map((p: any) => p.text), ['Mariana', 'Botox', '18/11', '14:00']);
     assert.equal(tpl.components[1].parameters[0].payload, buttonPayload(appt.id, 'CONFIRM'));
 
     // A paciente toca em "Confirmar": chega pelo webhook assinado.
@@ -121,6 +121,21 @@ describe('YCloud', () => {
     assert.equal(after.patientResponse, 'CONFIRMED');
     const reply = w.http.requests.filter((r) => r.url.endsWith('/sendDirectly')).at(-1)!;
     assert.equal((reply.init!.body as any).type, 'text');
+  });
+
+  it('mostra o motivo quando o YCloud recusa o modelo', async () => {
+    const w = buildWorld('2026-11-17T13:00:00Z');
+    w.http.handler = (url) => {
+      if (url.includes('/whatsapp/phoneNumbers')) return { status: 200, json: { items: [{ phoneNumber: '+5511959699628', wabaId: 'waba1', status: 'CONNECTED' }] } };
+      if (url.endsWith('/webhookEndpoints?limit=100')) return { status: 200, json: { items: [] } };
+      if (url.endsWith('/webhookEndpoints')) return { status: 200, json: { id: 'wh1', secret: SECRET } };
+      if (url.includes('/whatsapp/templates?')) return { status: 200, json: { items: [] } };
+      if (url.endsWith('/whatsapp/templates')) return { status: 400, json: { error: { message: 'Invalid parameter', whatsappApiError: { error_user_msg: 'Nome já usado' } } } };
+      return { status: 404, json: {} };
+    };
+    await w.integrations.configureYCloud({ apiKey: 'key-123456' }, { id: 'adm', role: 'ADMIN' });
+    const conf = new ConfirmationService(w.repos, w.integrations, w.funnel, w.clock);
+    await assert.rejects(() => conf.createTemplate(), /Invalid parameter · Nome já usado/);
   });
 
   it('fora do horário ou desligado não envia', async () => {

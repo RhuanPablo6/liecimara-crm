@@ -37,9 +37,12 @@ const digits = (v: unknown) => (typeof v === 'string' ? v.replace(/\D/g, '') : n
 
 /** Mensagem de erro da API do YCloud, quando vier. */
 function ycloudError(status: number, body: any): GraphApiError {
-  const msg = body?.error?.message ?? body?.message ?? body?.whatsappApiError?.message ?? `HTTP ${status}`;
-  const e = GraphApiError.from(status, { error: { message: msg, code: body?.error?.code ?? null } });
-  return e;
+  const e = body?.error ?? body ?? {};
+  const wa = e?.whatsappApiError ?? body?.whatsappApiError ?? {};
+  const parts = [e?.message, wa?.error_user_title, wa?.error_user_msg, wa?.message, e?.details?.[0]?.message]
+    .filter((x): x is string => typeof x === 'string' && !!x.trim());
+  const msg = [...new Set(parts)].join(' · ') || `HTTP ${status}`;
+  return new GraphApiError(`YCloud: ${msg}`, status, typeof e?.code === 'number' ? e.code : null, null, status >= 500 || status === 429, `YCloud: ${msg}`);
 }
 
 export class YCloudAdapter implements WhatsAppProvider {
@@ -223,14 +226,22 @@ export class YCloudAdapter implements WhatsAppProvider {
     return { id: String(j?.id ?? ''), wamid: j?.wamid ? String(j.wamid) : null, status: String(j?.status ?? 'accepted') };
   }
 
+  /** WABA do número (guardada na conexão; se faltar, consulta o YCloud). */
+  async wabaId(): Promise<string> {
+    if (this.cfg.wabaId) return this.cfg.wabaId;
+    const j = await this.call('GET', 'whatsapp/phoneNumbers?limit=100');
+    const n = (j?.items ?? []).find((x: any) => digits(x.phoneNumber) === digits(this.cfg.phoneNumber));
+    if (!n?.wabaId) throw new GraphApiError('Conta do WhatsApp (WABA) não encontrada no YCloud', 400, null, null, false, 'Conta do WhatsApp (WABA) não encontrada no YCloud');
+    return String(n.wabaId);
+  }
+
   async createTemplate(t: { name: string; language: string; category: 'UTILITY'; components: unknown[] }) {
-    if (!this.cfg.wabaId) throw new GraphApiError('WABA não identificada: conecte de novo o YCloud', 400, null, null, false);
-    return this.call('POST', 'whatsapp/templates', { wabaId: this.cfg.wabaId, ...t });
+    return this.call('POST', 'whatsapp/templates', { wabaId: await this.wabaId(), ...t });
   }
 
   async findTemplate(name: string, language: string) {
     const q = new URLSearchParams({ 'filter.name': name, 'filter.language': language, limit: '10' });
-    if (this.cfg.wabaId) q.set('filter.wabaId', this.cfg.wabaId);
+    q.set('filter.wabaId', await this.wabaId());
     const j = await this.call('GET', `whatsapp/templates?${q}`);
     return (j?.items ?? [])[0] ?? null;
   }

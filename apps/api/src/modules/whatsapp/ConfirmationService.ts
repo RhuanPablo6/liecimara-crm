@@ -23,19 +23,26 @@ export interface ConfirmationSettings {
   sendHour: number;
   templateName: string;
   language: string;
+  /** Texto exato do modelo enviado à Meta (com o nome da clínica). */
+  templateBody?: string | null;
   lastRunDay?: string | null;
 }
 
 export const DEFAULT_CONFIRMATION_SETTINGS: ConfirmationSettings = {
   enabled: false,
   sendHour: 9,
-  templateName: 'confirmacao_agendamento_v1',
+  templateName: 'confirmacaoagendamento1',
   language: 'pt_BR',
 };
 
-/** Texto do modelo enviado para aprovação. Variáveis: nome, clínica, procedimento, data, hora. */
-export const TEMPLATE_BODY =
-  'Olá, {{1}}! Aqui é da {{2}}. Passando para confirmar seu horário de {{3}} no dia {{4}} às {{5}}. Você confirma sua presença?';
+/**
+ * Texto do modelo enviado para aprovação. O nome da clínica vai fixo no texto (menos variáveis =
+ * aprovação mais fácil). Variáveis: {{1}} nome, {{2}} procedimento, {{3}} data, {{4}} hora.
+ */
+export const templateBodyFor = (clinic: string) =>
+  `Olá, {{1}}! Aqui é da ${clinic}. Passando para confirmar seu horário de {{2}} no dia {{3}} às {{4}}. Você confirma sua presença?`;
+/** Texto padrão (para a prévia antes de criar). */
+export const TEMPLATE_BODY = templateBodyFor(DEFAULT_TEMPLATES.clinicName);
 export const TEMPLATE_BUTTONS = ['Confirmar', 'Remarcar', 'Desmarcar'] as const;
 const ACTIONS = ['CONFIRM', 'RESCHEDULE', 'CANCEL'] as const;
 
@@ -98,7 +105,8 @@ export class ConfirmationService {
         templateError = (e as Error).message;
       }
     }
-    return { connected: !!p, settings: s, template, templateError, body: TEMPLATE_BODY, buttons: TEMPLATE_BUTTONS };
+    const body = s.templateBody ?? templateBodyFor(await this.clinicName());
+    return { connected: !!p, settings: s, template, templateError, body, buttons: TEMPLATE_BUTTONS };
   }
 
   /** Cria o modelo na Meta (via YCloud). A aprovação costuma levar de minutos a 24 h. */
@@ -107,16 +115,22 @@ export class ConfirmationService {
     const p = await this.provider();
     const existing = await p.findTemplate(s.templateName, s.language).catch(() => null);
     if (existing) return { status: String(existing.status), reason: existing.reason ?? null, alreadyExists: true };
-    const clinic = await this.clinicName();
-    const t = await p.createTemplate({
-      name: s.templateName,
-      language: s.language,
-      category: 'UTILITY',
-      components: [
-        { type: 'BODY', text: TEMPLATE_BODY, example: { body_text: [['Mariana', clinic, 'Botox', '18/11', '14:00']] } },
-        { type: 'BUTTONS', buttons: TEMPLATE_BUTTONS.map((text) => ({ type: 'QUICK_REPLY', text })) },
-      ],
-    });
+    const body = templateBodyFor(await this.clinicName());
+    let t: any;
+    try {
+      t = await p.createTemplate({
+        name: s.templateName,
+        language: s.language,
+        category: 'UTILITY',
+        components: [
+          { type: 'BODY', text: body, example: { body_text: [['Mariana', 'Botox', '18/11', '14:00']] } },
+          { type: 'BUTTONS', buttons: TEMPLATE_BUTTONS.map((text) => ({ type: 'QUICK_REPLY', text })) },
+        ],
+      });
+    } catch (e) {
+      throw new DomainError('WHATSAPP_TEMPLATE', `Não foi possível criar o modelo: ${(e as any)?.userMessage ?? (e as Error).message}`, 502);
+    }
+    await this.repos.settings.set(CONFIRMATION_SETTINGS_KEY, { ...s, templateBody: body });
     return { status: String(t?.status ?? 'PENDING'), reason: t?.reason ?? null, alreadyExists: false };
   }
 
@@ -138,8 +152,8 @@ export class ConfirmationService {
 
     const procedure = appt.procedureId ? await this.repos.procedures.findById(appt.procedureId) : null;
     const nome = firstName(contact.name ?? contact.profileName);
-    const clinic = await this.clinicName();
-    const vars = [nome, clinic, procedure?.name ?? 'avaliação', ddmm(appt.scheduledFor), hhmm(appt.scheduledFor)];
+    const vars = [nome, procedure?.name ?? 'avaliação', ddmm(appt.scheduledFor), hhmm(appt.scheduledFor)];
+    const body = s.templateBody ?? templateBodyFor(await this.clinicName());
     try {
       const sent = await p.sendTemplate(contact.waId, s.templateName, s.language, [
         { type: 'body', parameters: vars.map((text) => ({ type: 'text' as const, text })) },
@@ -153,7 +167,7 @@ export class ConfirmationService {
           direction: 'OUTBOUND',
           source: 'CLOUD_API',
           type: 'template',
-          body: TEMPLATE_BODY.replace(/\{\{(\d)\}\}/g, (_m, i) => vars[Number(i) - 1] ?? ''),
+          body: body.replace(/\{\{(\d)\}\}/g, (_m, i) => vars[Number(i) - 1] ?? ''),
           occurredAt: now,
           receivedAt: now,
         }),
