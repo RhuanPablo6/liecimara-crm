@@ -201,6 +201,19 @@ export class MetaSyncService {
         } else {
           checks.push({ name: 'Contas configuradas', ok: true, detail: 'todas as contas acessíveis' });
         }
+        // Ler não basta para pausar/ativar: o usuário do sistema precisa de "Gerenciar campanhas" na conta.
+        const used = accessible.filter((a) => !configured.length || configured.includes(a.account_id));
+        const known = used.filter((a) => Array.isArray(a.user_tasks));
+        if (known.length) {
+          const readOnly = known.filter((a) => !a.user_tasks!.some((t) => t === 'ADVERTISE' || t === 'MANAGE'));
+          checks.push({
+            name: 'Pode alterar anúncios nas contas (pausar, ativar, orçamento)',
+            ok: readOnly.length === 0,
+            detail: readOnly.length
+              ? `só leitura em: ${readOnly.map((a) => a.name).join(', ')}. No Gerenciador de Negócios → Usuários do sistema → Atribuir ativos, marque "Gerenciar campanhas" nessa conta.`
+              : 'sim',
+          });
+        }
       }
       return checks;
     } catch (e) {

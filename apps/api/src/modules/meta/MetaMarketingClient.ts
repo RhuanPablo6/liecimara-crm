@@ -59,6 +59,8 @@ export interface MetaAdAccount {
   account_status?: number; // 1 = ativa
   currency?: string;
   timezone_name?: string;
+  /** Tarefas do usuário do token na conta (ex.: ANALYZE, ADVERTISE, MANAGE). Precisa de ADVERTISE/MANAGE para alterar. */
+  user_tasks?: string[];
 }
 
 export const MESSAGING_STARTED_ACTION = 'onsite_conversion.messaging_conversation_started_7d';
@@ -93,7 +95,7 @@ export class MetaMarketingClient {
 
   /** Contas de anúncios a que o token tem acesso (usuário do sistema ou pessoa). */
   listAdAccounts() {
-    return this.getAll<MetaAdAccount>('me/adaccounts', { fields: 'id,account_id,name,account_status,currency,timezone_name' });
+    return this.getAll<MetaAdAccount>('me/adaccounts', { fields: 'id,account_id,name,account_status,currency,timezone_name,user_tasks' });
   }
 
   listCampaigns(adAccountId: string) {

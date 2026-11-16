@@ -5,7 +5,7 @@ import { validateWindow } from '../src/modules/meta/AdsManagerService.js';
 import { actor, buildWorld } from './helpers.js';
 
 /** Meta fictícia com estado: campanha CBO (orçamento na campanha) e campanha ABO (orçamento no conjunto). */
-function fakeMeta(w: ReturnType<typeof buildWorld>, opts: { deny?: boolean } = {}) {
+function fakeMeta(w: ReturnType<typeof buildWorld>, opts: { deny?: boolean; readOnly?: boolean; scopes?: string[] } = {}) {
   const state: Record<string, any> = {
     'CMP-1': { id: 'CMP-1', name: 'Botox CBO', status: 'ACTIVE', effective_status: 'ACTIVE', account_id: '111', daily_budget: '5000' },
     'CMP-2': { id: 'CMP-2', name: 'Lavieen ABO', status: 'ACTIVE', effective_status: 'ACTIVE', account_id: '111' },
@@ -21,6 +21,8 @@ function fakeMeta(w: ReturnType<typeof buildWorld>, opts: { deny?: boolean } = {
     const method = req.init?.method ?? 'GET';
     const path = new URL(url).pathname.replace(/^\/v[\d.]+\//, '');
     if (opts.deny && method !== 'GET') return { status: 403, json: { error: { message: '(#200) Requires ads_management permission', code: 200 } } };
+    if (opts.readOnly && method !== 'GET') return { status: 400, json: { error: { message: "Unsupported post request. Object with ID 'AD-1' does not exist", code: 100, error_subcode: 33 } } };
+    if (path === 'debug_token') return { status: 200, json: { data: { is_valid: true, scopes: opts.scopes ?? ['ads_read', 'ads_management'] } } };
     if (path === 'me/adaccounts') return { status: 200, json: { data: [{ id: 'act_111', account_id: '111', name: 'Clínica', currency: 'BRL' }] } };
     if (path.endsWith('/insights')) return { status: 200, json: { data: [{ ad_id: 'AD-1', date_start: '2026-11-10', spend: '40.00', impressions: '2000', clicks: '50', actions: [{ action_type: 'onsite_conversion.messaging_conversation_started_7d', value: '8' }] }] } };
     if (path === 'act_111/campaigns') return { status: 200, json: { data: [state['CMP-1'], state['CMP-2']] } };
@@ -56,7 +58,7 @@ function fakeMeta(w: ReturnType<typeof buildWorld>, opts: { deny?: boolean } = {
   return { state, schedules };
 }
 
-async function world(opts: { deny?: boolean } = {}) {
+async function world(opts: { deny?: boolean; readOnly?: boolean; scopes?: string[] } = {}) {
   const w = buildWorld('2026-11-15T15:00:00.000Z');
   await w.integrations.configureMeta({ adAccountIds: '', accessToken: 'token-de-teste-123456789' }, { id: 'u', role: 'ADMIN' });
   const meta = fakeMeta(w, opts);
@@ -98,6 +100,13 @@ describe('Gerenciador de anúncios', () => {
     await assert.rejects(() => w.adsManager.setBudget('campaign', 'CMP-2', 'daily', 6500, actor), /orçamento fica em cada conjunto/);
     await w.adsManager.setBudget('adset', 'SET-2', 'daily', 4000, actor);
     assert.equal(state['SET-2'].daily_budget, '4000');
+  });
+
+  it('erro 100/33 ao alterar: diz se falta escopo no token ou acesso à conta', async () => {
+    const a = await world({ readOnly: true, scopes: ['ads_read'] });
+    await assert.rejects(() => a.w.adsManager.setStatus('ad', 'AD-1', 'PAUSED', actor), /só tem permissão de leitura/);
+    const b = await world({ readOnly: true });
+    await assert.rejects(() => b.w.adsManager.setStatus('ad', 'AD-1', 'PAUSED', actor), /Gerenciar campanhas/);
   });
 
   it('sem permissão de gestão: mensagem clara', async () => {

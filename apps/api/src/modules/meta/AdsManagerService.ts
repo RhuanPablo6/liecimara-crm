@@ -102,6 +102,30 @@ export class AdsManagerService {
     throw err;
   }
 
+  /**
+   * Erro em alteração (POST). O código 100/33 ("does not exist, cannot be loaded due to missing permissions")
+   * em um anúncio que o CRM consegue ler quase sempre é falta de permissão de escrita: confere o token para
+   * dizer exatamente o que falta.
+   */
+  private async explainWrite(err: unknown, client: MetaMarketingClient): Promise<never> {
+    if (err instanceof GraphApiError && err.code === 100 && err.subcode === 33) {
+      const t = await client.tokenScopes().catch(() => null);
+      if (t && !t.scopes.includes('ads_management')) {
+        throw new DomainError(
+          'META_PERMISSION',
+          'O token da Meta conectado ao CRM só tem permissão de leitura (falta "ads_management"). Gere um novo token do usuário do sistema marcando ads_management e cole em Integrações → Meta Ads.',
+          403,
+        );
+      }
+      throw new DomainError(
+        'META_PERMISSION',
+        'A Meta não deixou o CRM alterar este item: o usuário do sistema do token só pode ver a conta de anúncios. No Gerenciador de Negócios → Usuários do sistema → Atribuir ativos, dê a ele "Gerenciar campanhas" (ou controle total) nessa conta de anúncios. Não precisa gerar outro token.',
+        403,
+      );
+    }
+    return this.explain(err);
+  }
+
   // ── Leitura ─────────────────────────────────────────────
 
   async tree(range: DateRange, opts: { accountId?: string; includeArchived?: boolean } = {}) {
@@ -245,7 +269,7 @@ export class AdsManagerService {
       await client.update(id, { status });
       await this.refreshCampaign(client, campaignId);
     } catch (e) {
-      this.explain(e);
+      await this.explainWrite(e, client);
     }
     await this.repos.audit.log({
       userId: actor.id,
@@ -280,7 +304,7 @@ export class AdsManagerService {
       await client.update(id, { [kind === 'daily' ? 'daily_budget' : 'lifetime_budget']: cents });
       await this.refreshCampaign(client, campaignId);
     } catch (e) {
-      this.explain(e);
+      await this.explainWrite(e, client);
     }
     await this.repos.audit.log({
       userId: actor.id,
@@ -310,7 +334,7 @@ export class AdsManagerService {
         }))
         .sort((a, b) => a.start.getTime() - b.start.getTime());
     } catch (e) {
-      this.explain(e);
+      await this.explainWrite(e, client);
     }
   }
 
@@ -350,7 +374,7 @@ export class AdsManagerService {
     } catch (e) {
       // Algumas janelas podem ter sido criadas antes do erro: ficam registradas e aparecem na lista.
       await this.repos.audit.log({ userId: actor.id, action: 'meta.budgetSchedule.partial', entityType: level, entityId: id, after: { created }, ip: actor.ip });
-      this.explain(e);
+      await this.explainWrite(e, client);
     }
     await this.repos.audit.log({
       userId: actor.id,
@@ -371,7 +395,7 @@ export class AdsManagerService {
     try {
       await client.deleteNode(scheduleId);
     } catch (e) {
-      this.explain(e);
+      await this.explainWrite(e, client);
     }
     await this.repos.audit.log({ userId: actor.id, action: 'meta.budgetSchedule.delete', entityType: level, entityId: parentId, after: { scheduleId }, ip: actor.ip });
     return { ok: true };
