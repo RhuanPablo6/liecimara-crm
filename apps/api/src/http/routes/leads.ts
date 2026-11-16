@@ -4,7 +4,9 @@ import type { Container } from '../../container.js';
 import { CONFIDENCE_LABELS_PT, LOST_REASON_LABELS_PT, STAGE_LABELS_PT, type Lead } from '../../domain/types.js';
 import { ORGANIC_KEYS, ORIGIN_LABELS, originOf } from '../../domain/origin.js';
 import { tagOf } from '../../modules/patients/PatientsService.js';
-import { DomainError } from '../../domain/errors.js';
+import { DomainError, ForbiddenError } from '../../domain/errors.js';
+import { effectivePermissions } from '../../modules/auth/screens.js';
+import { dayToDate, isDay } from '../../shared/days.js';
 import { nextFreeCodes, normalizeAdCode, suggestedMessage } from '../../modules/ads/adCodes.js';
 import { actorOf, type Guard } from '../server.js';
 
@@ -117,8 +119,35 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
             notes: z.string().max(500).nullish(),
           })
           .nullish(),
+        // Valor do procedimento e se já foi pago (opcional).
+        sale: z
+          .object({
+            amountCents: z.number().int().positive('Informe o valor').max(10_000_000_00),
+            soldAt: z.string().refine(isDay, 'Data inválida').nullish(),
+            dueAt: z.string().refine(isDay, 'Data inválida').nullish(),
+            payment: z
+              .object({
+                method: z.enum(['PIX', 'CREDIT_CARD', 'DEBIT_CARD', 'CASH', 'BANK_TRANSFER', 'OTHER']),
+                installments: z.number().int().min(1).max(24).default(1),
+                amountCents: z.number().int().positive().nullish(),
+                paidAt: z.string().refine(isDay, 'Data inválida').nullish(),
+              })
+              .nullish(),
+          })
+          .nullish(),
       })
       .parse(req.body);
+    if (b.sale) {
+      const user = await c.repos.users.findById(req.user!.sub);
+      const perms = user ? effectivePermissions(user) : [];
+      if (!perms.includes('sales:write') || (b.sale.payment && !perms.includes('payments:write'))) {
+        throw new ForbiddenError('Seu usuário não pode lançar valores de venda');
+      }
+      if (!b.appointment?.procedureId && !b.procedureInterestId) throw new DomainError('VALIDATION', 'Escolha o procedimento para lançar o valor');
+      if (b.sale.payment?.amountCents && b.sale.payment.amountCents > b.sale.amountCents) {
+        throw new DomainError('VALIDATION', 'O valor pago passa do valor do procedimento');
+      }
+    }
     let attribution: { adMetaId: string; note: string } | null = null;
     if (b.adCode) {
       let code: string;
@@ -164,7 +193,28 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
       );
       lead = (await c.repos.leads.findById(lead.id))!;
     }
-    return { ...lead, appointment, existing };
+    let sale = null;
+    let payment = null;
+    if (b.sale) {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const soldAt = b.sale.soldAt ?? today;
+      sale = await c.funnel.registerSale(
+        lead.id,
+        { procedureId: (b.appointment?.procedureId ?? b.procedureInterestId)!, amountCents: b.sale.amountCents, soldAt: dayToDate(soldAt) },
+        actor,
+      );
+      const paid = b.sale.payment ? (b.sale.payment.amountCents ?? b.sale.amountCents) : 0;
+      if (b.sale.dueAt && paid < b.sale.amountCents) sale = await c.repos.sales.update(sale.id, { dueAt: dayToDate(b.sale.dueAt) });
+      if (b.sale.payment) {
+        payment = await c.funnel.registerPayment(
+          sale.id,
+          { amountCents: paid, method: b.sale.payment.method, installments: b.sale.payment.installments, paidAt: dayToDate(b.sale.payment.paidAt ?? today) },
+          actor,
+        );
+      }
+      lead = (await c.repos.leads.findById(lead.id))!;
+    }
+    return { ...lead, appointment, sale, payment, existing };
   });
 
   app.get('/leads/:id', { preHandler: guard('leads:read') }, async (req) => {

@@ -6,7 +6,10 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorText, Field, Input, NativeSelect, Textarea } from '@/components/ui/form';
+import { PaymentFields } from '@/components/finance-sales';
+import { useMe } from '@/components/access';
 import { api, useAction, useApi } from '@/lib/api';
+import { brl, parseBRL } from '@/lib/format';
 import { ORGANIC_ORIGINS, ORIGIN_NOTE_HINT } from '@/lib/origins';
 
 const DURATIONS = [15, 30, 45, 60, 90, 120, 180, 240];
@@ -48,6 +51,14 @@ export function AgendaPatientDialog({ onSaved }: { onSaved?: () => void }) {
   const [originNote, setOriginNote] = useState('');
   const [wallet, setWallet] = useState(true);
   const [saved, setSaved] = useState<Saved[]>([]);
+  const [amount, setAmount] = useState('');
+  const [received, setReceived] = useState<'none' | 'full' | 'partial'>('none');
+  const [paid, setPaid] = useState('');
+  const [method, setMethod] = useState('PIX');
+  const [installments, setInstallments] = useState('1');
+  const [paidAt, setPaidAt] = useState(spDay());
+  const me = useMe();
+  const canSell = !!me?.permissions.includes('sales:write');
   const { data: procedures } = useApi<any[]>(open ? '/procedures' : null);
   const { data: dayAppts } = useApi<any[]>(open && day ? `/agenda?from=${toInstant(day, '00:00')}&to=${toInstant(day, '23:59')}&v=${saved.length}` : null);
   const { busy, error, run, setError } = useAction();
@@ -59,12 +70,25 @@ export function AgendaPatientDialog({ onSaved }: { onSaved?: () => void }) {
     return s < start + Number(duration) && start < s + a.durationMin;
   });
   const phoneOk = waId.length >= 12;
+  const amountCents = parseBRL(amount);
+  const paidCents = received === 'partial' ? parseBRL(paid) : received === 'full' ? amountCents : 0;
+  const saleError =
+    amount.trim() && !amountCents
+      ? 'Valor inválido'
+      : amountCents && !procedureId
+        ? 'Escolha o procedimento para lançar o valor'
+        : received === 'partial' && (!paidCents || paidCents >= (amountCents ?? 0))
+          ? 'O valor pago deve ser menor que o valor do procedimento'
+          : null;
 
   function resetPatient() {
     setWaId('55');
     setName('');
     setNotes('');
     setOriginNote('');
+    setAmount('');
+    setPaid('');
+    setReceived('none');
     setError(null);
   }
 
@@ -83,9 +107,26 @@ export function AgendaPatientDialog({ onSaved }: { onSaved?: () => void }) {
             procedureId: procedureId || null,
             notes: notes.trim() || null,
           },
+          sale: amountCents
+            ? {
+                amountCents,
+                // Saldo em aberto: previsão de receber no dia do atendimento.
+                dueAt: received === 'full' ? null : day,
+                payment:
+                  received === 'none'
+                    ? null
+                    : {
+                        method,
+                        installments: method === 'CREDIT_CARD' ? Number(installments) : 1,
+                        amountCents: received === 'partial' ? paidCents : null,
+                        paidAt,
+                      },
+              }
+            : undefined,
         },
       });
-      setSaved((s) => [{ leadId: lead.id, name: name.trim() || `+${waId}`, when: `${dayLabel(day)} ${time}`, existing: !!lead.existing }, ...s]);
+      const money = amountCents ? ` · ${brl(amountCents)} ${received === 'full' ? '(pago)' : received === 'partial' ? `(pago ${brl(paidCents ?? 0)})` : '(a receber)'}` : '';
+      setSaved((s) => [{ leadId: lead.id, name: name.trim() || `+${waId}`, when: `${dayLabel(day)} ${time}${money}`, existing: !!lead.existing }, ...s]);
       onSaved?.();
       resetPatient();
       if (!again) setOpen(false);
@@ -181,6 +222,43 @@ export function AgendaPatientDialog({ onSaved }: { onSaved?: () => void }) {
             <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="ex.: 2ª sessão, sinal pago" />
           </Field>
 
+          {canSell && (
+            <div className="space-y-4 rounded-md border p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Valor e pagamento (opcional)</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Valor do procedimento (R$)">
+                  <Input inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                </Field>
+                <Field label="Já está pago?">
+                  <NativeSelect value={received} onChange={(e) => setReceived(e.target.value as any)} disabled={!amountCents}>
+                    <option value="none">Não, vai pagar depois</option>
+                    <option value="full">Sim, pago o valor total</option>
+                    <option value="partial">Pagou uma parte (sinal)</option>
+                  </NativeSelect>
+                </Field>
+                {amountCents && received === 'partial' ? (
+                  <Field label="Valor já pago (R$)">
+                    <Input inputMode="decimal" placeholder="0,00" value={paid} onChange={(e) => setPaid(e.target.value)} />
+                  </Field>
+                ) : null}
+                {amountCents && received !== 'none' ? (
+                  <>
+                    <PaymentFields method={method} setMethod={setMethod} installments={installments} setInstallments={setInstallments} />
+                    <Field label="Data do pagamento">
+                      <Input type="date" max={spDay()} value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+                    </Field>
+                  </>
+                ) : null}
+              </div>
+              {amountCents && received !== 'full' && !saleError ? (
+                <p className="text-xs text-muted-foreground">
+                  {brl(amountCents - (paidCents ?? 0))} fica em Contas a receber com previsão para o dia do atendimento.
+                </p>
+              ) : null}
+              {saleError && <p className="text-sm text-red-700">{saleError}</p>}
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Como a paciente chegou?">
               <NativeSelect value={originType} onChange={(e) => setOriginType(e.target.value)}>
@@ -205,10 +283,10 @@ export function AgendaPatientDialog({ onSaved }: { onSaved?: () => void }) {
 
           <ErrorText>{error}</ErrorText>
           <div className="flex flex-wrap gap-2">
-            <Button disabled={busy || !phoneOk || !day} onClick={() => save(false)}>
+            <Button disabled={busy || !phoneOk || !day || !!saleError} onClick={() => save(false)}>
               Salvar
             </Button>
-            <Button variant="outline" disabled={busy || !phoneOk || !day} onClick={() => save(true)}>
+            <Button variant="outline" disabled={busy || !phoneOk || !day || !!saleError} onClick={() => save(true)}>
               Salvar e incluir outra
             </Button>
           </div>

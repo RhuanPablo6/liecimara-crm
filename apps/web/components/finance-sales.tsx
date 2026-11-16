@@ -25,7 +25,7 @@ export const SALE_METHODS: Record<string, string> = {
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 const centsToInput = (c: number) => (c / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function PaymentFields({
+export function PaymentFields({
   method,
   setMethod,
   installments,
