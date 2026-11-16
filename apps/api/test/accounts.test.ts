@@ -131,3 +131,32 @@ describe('Contas e fluxo de caixa', () => {
     assert.ok(DEFAULT_FEE_RULES.every((r) => r.feePct === 0));
   });
 });
+
+describe('Saldo a receber com agendamento', () => {
+  it('vence no dia do procedimento marcado, e acompanha a remarcação', async () => {
+    const w = buildWorld('2026-11-16T15:00:00.000Z');
+    const botox = await seedProcedure(w, 'Botox');
+    const lead = await w.funnel.createLeadManually({ waId: '5511900000077', name: 'Ana' }, actor);
+    const appt = await w.funnel.scheduleAppointment(lead.id, { scheduledFor: new Date('2026-11-25T17:00:00Z'), procedureId: botox.id }, actor);
+    // Venda registrada sem data de recebimento (vira "hoje" por padrão)
+    await w.funnel.registerSale(lead.id, { procedureId: botox.id, amountCents: 150000, soldAt: dayToDate('2026-11-10') }, actor);
+
+    let r = await w.accounts.list('2026-11-01', '2026-11-30', '2026-11-16');
+    let bal = r.receivables.find((i: any) => i.type === 'SALE_BALANCE')!;
+    assert.equal(bal.dueDay, '2026-11-25');
+    assert.equal(bal.status, 'PENDING');
+    assert.equal(bal.dueFromAppointment, true);
+
+    await w.funnel.updateAppointment(appt.id, { scheduledFor: new Date('2026-12-02T17:00:00Z') }, actor);
+    r = await w.accounts.list('2026-11-01', '2026-12-31', '2026-11-16');
+    bal = r.receivables.find((i: any) => i.type === 'SALE_BALANCE')!;
+    assert.equal(bal.dueDay, '2026-12-02');
+
+    // Sem horário em aberto: volta a valer a data da venda (atrasado)
+    await w.funnel.cancelAppointment(appt.id, 'desistiu', actor);
+    r = await w.accounts.list('2026-11-01', '2026-12-31', '2026-11-16');
+    bal = r.receivables.find((i: any) => i.type === 'SALE_BALANCE')!;
+    assert.equal(bal.dueDay, '2026-11-10');
+    assert.equal(bal.status, 'OVERDUE');
+  });
+});

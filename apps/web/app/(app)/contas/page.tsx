@@ -192,6 +192,7 @@ function ReceivablesTable({ items, showPaid, onChanged }: { items: any[]; showPa
                   <span className="font-medium">{i.description}</span>
                 )}
                 {i.detail && <p className="text-xs text-muted-foreground">{i.detail}</p>}
+                {i.dueFromAppointment && <p className="text-xs text-navy-600">Vence no dia do agendamento</p>}
               </TD>
               <TD className="whitespace-nowrap text-sm">
                 {i.type === 'CARD' ? (

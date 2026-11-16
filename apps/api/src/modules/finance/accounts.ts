@@ -141,6 +141,8 @@ export interface AccountItem {
   /** Para a mensagem de cobrança (saldo do paciente). */
   waId?: string | null;
   procedureName?: string | null;
+  /** O vencimento segue o agendamento da paciente (paga no dia do procedimento). */
+  dueFromAppointment?: boolean;
 }
 
 const statusOf = (done: boolean, dueDay: string, today: string): AccountStatus => (done ? 'PAID' : dueDay < today ? 'OVERDUE' : 'PENDING');
@@ -237,11 +239,31 @@ export class AccountsService {
         });
       }
     }
+    // Saldo em aberto com horário marcado: a paciente costuma pagar no dia do procedimento.
+    // Se houver agendamento em aberto depois do vencimento informado, o vencimento passa a ser o dia dele
+    // (de preferência o do mesmo procedimento). Remarcou? O vencimento acompanha.
+    const openApptsByLead = new Map<string, { day: string; procedureId: string | null }[]>();
+    for (const sale of sales as Sale[]) {
+      if (sale.status !== 'ACTIVE' || openApptsByLead.has(sale.leadId)) continue;
+      if (sale.amountCents - (paidBySale.get(sale.id) ?? 0) <= 0) continue;
+      const appts = await this.repos.appointments.listByLead(sale.leadId);
+      openApptsByLead.set(
+        sale.leadId,
+        appts
+          .filter((a) => a.status === 'SCHEDULED' || a.status === 'CONFIRMED')
+          .map((a) => ({ day: spDay(a.scheduledFor), procedureId: a.procedureId }))
+          .sort((a, b) => a.day.localeCompare(b.day)),
+      );
+    }
     for (const sale of sales as Sale[]) {
       if (sale.status !== 'ACTIVE') continue;
       const open = sale.amountCents - (paidBySale.get(sale.id) ?? 0);
       if (open <= 0) continue;
-      const dueDay = spDay(sale.dueAt ?? sale.soldAt);
+      const baseDay = spDay(sale.dueAt ?? sale.soldAt);
+      const appts = (openApptsByLead.get(sale.leadId) ?? []).filter((a) => a.day >= baseDay || a.day >= today);
+      const appt = appts.find((a) => a.procedureId === sale.procedureId) ?? appts[0] ?? null;
+      const dueFromAppointment = !!appt && appt.day > baseDay;
+      const dueDay = dueFromAppointment ? appt!.day : baseDay;
       receivables.push({
         key: `bal:${sale.id}`,
         type: 'SALE_BALANCE',
@@ -254,6 +276,7 @@ export class AccountsService {
         leadId: sale.leadId,
         waId: phones.get(sale.leadId) ?? null,
         procedureName: procName.get(sale.procedureId) ?? null,
+        dueFromAppointment,
       });
     }
 
