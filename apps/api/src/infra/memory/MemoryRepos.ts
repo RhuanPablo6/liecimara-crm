@@ -26,6 +26,7 @@ import type {
   ProcedurePerformed,
   RecallAction,
   AgendaBlock,
+  Quote,
   Reminder,
   Sale,
   SupplyPurchase,
@@ -57,6 +58,7 @@ interface State {
   settings: Map<string, unknown>;
   recalls: Map<string, RecallAction>;
   agendaBlocks: Map<string, AgendaBlock>;
+  quotes: Map<string, Quote>;
   performed: Map<string, ProcedurePerformed>;
   reminders: Map<string, Reminder>;
   connections: Map<string, IntegrationConnection>;
@@ -87,6 +89,7 @@ const emptyState = (): State => ({
   settings: new Map(),
   recalls: new Map(),
   agendaBlocks: new Map(),
+  quotes: new Map(),
   performed: new Map(),
   reminders: new Map(),
   connections: new Map(),
@@ -446,6 +449,21 @@ export class MemoryRepos implements Repos {
       for (const [k, p] of this.s.performed) if (p.saleId === id) this.s.performed.delete(k);
       if (!this.s.sales.delete(id)) throw new NotFoundError('Venda', id);
     },
+  };
+
+  quotes = {
+    create: async (d: Omit<Quote, 'id' | 'number' | 'createdAt' | 'updatedAt'>) => {
+      const now = new Date();
+      return insert(this.s.quotes, { ...d, number: this.s.quotes.size + 1, createdAt: now, updatedAt: now }, 'quo_');
+    },
+    update: async (id: string, d: Partial<Quote>) => patch(this.s.quotes, id, { ...d, updatedAt: new Date() }),
+    findById: async (id: string) => clone(this.s.quotes.get(id) ?? null),
+    list: async (f: { contactId?: string; from?: Date; to?: Date }) =>
+      clone(
+        [...this.s.quotes.values()]
+          .filter((q) => (!f.contactId || q.contactId === f.contactId) && (!f.from || q.createdAt >= f.from) && (!f.to || q.createdAt < f.to))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+      ),
   };
 
   agendaBlocks = {

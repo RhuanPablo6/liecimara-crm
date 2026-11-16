@@ -1,6 +1,6 @@
 'use client';
 
-import { BarChart3, BellRing, CalendarClock, CalendarDays, KanbanSquare, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, ShieldCheck, Target, Users, Wallet } from 'lucide-react';
+import { BarChart3, BellRing, CalendarClock, CalendarDays, KanbanSquare, HeartHandshake, KeyRound, LayoutDashboard, LogOut, Megaphone, Menu, Package, Receipt, Settings, ShieldCheck, Target, Users, Wallet, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
@@ -12,6 +12,7 @@ const NAV = [
   { key: 'painel', href: '/', label: 'Painel', icon: LayoutDashboard },
   { key: 'agenda', href: '/agenda', label: 'Agenda', icon: CalendarDays },
   { key: 'leads', href: '/leads', label: 'Leads', icon: Users },
+  { key: 'orcamentos', href: '/orcamentos', label: 'Orçamentos', icon: FileText },
   { key: 'pacientes', href: '/pacientes', label: 'Pacientes', icon: HeartHandshake },
   { key: 'retornos', href: '/retornos', label: 'Retornos', icon: BellRing },
   { key: 'funil', href: '/funil', label: 'Funil', icon: KanbanSquare },
@@ -63,7 +64,7 @@ export function Sidebar() {
   return (
     <>
       {/* Barra superior no celular */}
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between bg-navy-800 px-4 md:hidden">
+      <header className="sticky top-0 z-40 flex h-14 print:hidden items-center justify-between bg-navy-800 px-4 md:hidden">
         <span className="font-serif text-lg text-gold-300">Liecimara</span>
         <button aria-label="Menu" onClick={() => setOpen((v) => !v)} className="text-white">
           <Menu className="h-5 w-5" />
@@ -73,7 +74,7 @@ export function Sidebar() {
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-navy-800 py-6 transition-transform md:sticky md:top-0 md:h-screen md:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-navy-800 py-6 transition-transform md:sticky md:top-0 md:h-screen md:translate-x-0 print:hidden',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >

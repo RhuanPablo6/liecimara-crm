@@ -1,8 +1,13 @@
 'use client';
 
-import { ArrowLeft, CalendarCheck, CalendarX, CircleDollarSign, MessageCircle, ShoppingBag, Sparkles, UserPlus } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, FilePlus2, FileText, CalendarX, CircleDollarSign, MessageCircle, ShoppingBag, Sparkles, UserPlus } from 'lucide-react';
 import Link from 'next/link';
-import { use } from 'react';
+import { useRouter } from 'next/navigation';
+import { use, useState } from 'react';
+import { useMe } from '@/components/access';
+import { QuoteEditor } from '@/components/quotes/quote-editor';
+import { QuoteStatusBadge, quoteNumber } from '@/components/quotes/quote-document';
+import { Button } from '@/components/ui/button';
 import { MessageButton } from '@/components/message-button';
 import { PatientTagControl } from '@/components/patient-tag';
 import { StageBadge } from '@/components/badges';
@@ -38,6 +43,51 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
         <p className={cn('mt-1 text-2xl font-semibold tabular-nums', tone === 'warn' ? 'text-amber-700' : tone === 'bad' ? 'text-red-700' : 'text-navy-800')}>{value}</p>
         {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
+    </Card>
+  );
+}
+
+function PatientQuotes({ contact }: { contact: { id: string; name: string | null } }) {
+  const router = useRouter();
+  const me = useMe();
+  const [open, setOpen] = useState(false);
+  const { data } = useApi<{ items: any[] }>(`/quotes?contactId=${contact.id}`);
+  const canWrite = !!me?.permissions.includes('leads:write');
+  const items = data?.items ?? [];
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
+        <div>
+          <CardTitle>Orçamentos</CardTitle>
+          <CardDescription>Propostas apresentadas à paciente.</CardDescription>
+        </div>
+        {canWrite && (
+          <Button size="sm" variant="gold" onClick={() => setOpen(true)}>
+            <FilePlus2 /> Novo
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {!data && <p className="text-sm text-muted-foreground">Carregando…</p>}
+        {data && items.length === 0 && <p className="text-sm text-muted-foreground">Nenhum orçamento ainda.</p>}
+        {items.map((q) => (
+          <Link key={q.id} href={`/orcamentos/${q.id}`} className="block rounded-md border px-3 py-2 hover:bg-secondary/60">
+            <div className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 text-sm">
+                <FileText className="size-3.5 text-muted-foreground" /> Nº {quoteNumber(q.number)} · {date(q.createdAt)}
+              </span>
+              <QuoteStatusBadge status={q.effectiveStatus} />
+            </div>
+            <div className="mt-0.5 flex items-baseline justify-between gap-2">
+              <p className="truncate text-xs text-muted-foreground" title={q.summary}>
+                {q.summary}
+              </p>
+              <span className="text-sm font-medium tabular-nums">{brl(q.totalCents)}</span>
+            </div>
+          </Link>
+        ))}
+      </CardContent>
+      <QuoteEditor open={open} onOpenChange={setOpen} patient={contact} onSaved={(q) => router.push(`/orcamentos/${q.id}`)} />
     </Card>
   );
 }
@@ -147,6 +197,7 @@ export default function PatientPage({ params }: { params: Promise<{ id: string }
         </Card>
 
         <div className="space-y-6">
+          <PatientQuotes contact={{ id: contact.id, name: contact.name }} />
           <Card>
             <CardHeader>
               <CardTitle>Procedimentos comprados</CardTitle>

@@ -195,6 +195,34 @@ export interface Procedure {
   returnDays?: number | null;
 }
 
+export interface QuoteItem {
+  procedureId: string;
+  /** Texto exibido (ex.: "Botox – terço superior, 50 U"). */
+  description: string;
+  quantity: number;
+  unitPriceCents: number;
+  discountCents: number;
+}
+
+export interface Quote {
+  id: string;
+  number: number;
+  contactId: string;
+  leadId: string | null;
+  status: 'OPEN' | 'APPROVED' | 'REJECTED';
+  items: QuoteItem[];
+  discountCents: number;
+  totalCents: number;
+  validUntil: Date;
+  paymentTerms: string | null;
+  notes: string | null;
+  saleIds: string[] | null;
+  decidedAt: Date | null;
+  createdById: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface AgendaBlock {
   id: string;
   startAt: Date;

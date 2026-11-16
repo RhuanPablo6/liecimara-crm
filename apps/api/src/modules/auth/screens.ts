@@ -15,6 +15,7 @@ export const SCREENS: Screen[] = [
   { key: 'painel', label: 'Painel', path: '/', group: 'Atendimento', permissions: ['reports:read', 'leads:read'] },
   { key: 'agenda', label: 'Agenda', path: '/agenda', group: 'Atendimento', permissions: ['leads:read', 'leads:write'] },
   { key: 'leads', label: 'Leads', path: '/leads', group: 'Atendimento', permissions: ['leads:read', 'leads:write', 'attribution:manual', 'sales:write', 'payments:write'] },
+  { key: 'orcamentos', label: 'Orçamentos', path: '/orcamentos', group: 'Atendimento', permissions: ['leads:read', 'leads:write', 'sales:write'] },
   { key: 'pacientes', label: 'Pacientes', path: '/pacientes', group: 'Atendimento', permissions: ['leads:read', 'leads:write'] },
   { key: 'retornos', label: 'Retornos', path: '/retornos', group: 'Atendimento', permissions: ['leads:read', 'leads:write', 'messages:manage'] },
   { key: 'funil', label: 'Funil', path: '/funil', group: 'Atendimento', permissions: ['leads:read', 'leads:write'] },
@@ -32,7 +33,7 @@ export const SCREEN_KEYS = SCREENS.map((s) => s.key);
 
 /** Modelos prontos para agilizar o cadastro. */
 export const SCREEN_PRESETS: Record<string, { label: string; screens: string[] }> = {
-  reception: { label: 'Recepção', screens: ['painel', 'agenda', 'leads', 'pacientes', 'retornos', 'funil'] },
+  reception: { label: 'Recepção', screens: ['painel', 'agenda', 'leads', 'orcamentos', 'pacientes', 'retornos', 'funil'] },
   finance: { label: 'Financeiro', screens: ['financeiro', 'contas', 'metas', 'compras', 'despesas'] },
   marketing: { label: 'Marketing', screens: ['painel', 'relatorios', 'anuncios', 'leads'] },
 };

@@ -10,6 +10,7 @@ import type { Permission } from '../modules/auth/rbac.js';
 import { effectivePermissions } from '../modules/auth/screens.js';
 import { registerAdsManagerRoutes } from './routes/adsManager.js';
 import { registerAgendaRoutes } from './routes/agenda.js';
+import { registerQuoteRoutes } from './routes/quotes.js';
 import { registerPublicAppointmentRoutes } from './routes/publicAppointments.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerFinanceRoutes } from './routes/finance.js';
@@ -101,6 +102,7 @@ export function buildServer(c: Container) {
   registerRecallRoutes(app, c, guard);
   registerAgendaRoutes(app, c, guard);
   registerPublicAppointmentRoutes(app, c);
+  registerQuoteRoutes(app, c, guard);
 
   return app;
 }

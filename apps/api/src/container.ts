@@ -14,6 +14,7 @@ import { GoalsService } from './modules/finance/goals.js';
 import { PatientsService } from './modules/patients/PatientsService.js';
 import { RecallService } from './modules/recalls/RecallService.js';
 import { FunnelService } from './modules/funnel/FunnelService.js';
+import { QuoteService } from './modules/quotes/QuoteService.js';
 import { IntegrationService } from './modules/integrations/IntegrationService.js';
 import { AdsManagerService } from './modules/meta/AdsManagerService.js';
 import { MetaSyncService } from './modules/meta/MetaSyncService.js';
@@ -54,10 +55,11 @@ export function buildContainer(env: Env) {
   });
   const metaSync = new MetaSyncService(repos, vault, http, clock, integrationEnv, env.META_GRAPH_VERSION, engine);
   const adsManager = new AdsManagerService(repos, vault, http, integrationEnv, env.META_GRAPH_VERSION, metrics);
+  const quotes = new QuoteService(repos, funnel, clock);
   const confirmations = new ConfirmationService(repos, integrations, funnel, clock);
   processor.buttonHandler = (evt) => confirmations.handleButton(evt);
 
-  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, recalls, auth, audit, ingestion, processor, integrations, metaSync, adsManager, confirmations };
+  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, recalls, auth, audit, ingestion, processor, integrations, metaSync, adsManager, confirmations, quotes };
 }
 
 export type Container = ReturnType<typeof buildContainer>;

@@ -28,6 +28,7 @@ import type {
   ProcedurePerformed,
   RecallAction,
   AgendaBlock,
+  Quote,
   Reminder,
   Sale,
   SupplyPurchase,
@@ -240,6 +241,13 @@ export interface RecallActionRepo {
   list(): Promise<RecallAction[]>;
 }
 
+export interface QuoteRepo {
+  create(data: Omit<Quote, 'id' | 'number' | 'createdAt' | 'updatedAt'>): Promise<Quote>;
+  update(id: string, data: Partial<Omit<Quote, 'id' | 'number' | 'createdAt'>>): Promise<Quote>;
+  findById(id: string): Promise<Quote | null>;
+  list(filter: { contactId?: string; from?: Date; to?: Date }): Promise<Quote[]>;
+}
+
 export interface AgendaBlockRepo {
   create(data: Omit<AgendaBlock, 'id' | 'createdAt'>): Promise<AgendaBlock>;
   /** Bloqueios que encostam no intervalo [from, to). */
@@ -287,6 +295,7 @@ export interface Repos {
   settings: SettingRepo;
   recalls: RecallActionRepo;
   agendaBlocks: AgendaBlockRepo;
+  quotes: QuoteRepo;
   purge: PurgeRepo;
   /** Executa `fn` em transação. */
   tx<T>(fn: (r: Repos) => Promise<T>): Promise<T>;

@@ -42,3 +42,8 @@
     @apply font-serif tracking-tight;
   }
 }
+
+@media print {
+  html, body { background: #fff !important; }
+  @page { margin: 12mm; }
+}

@@ -640,3 +640,27 @@ model AgendaBlock {
   @@index([startAt, endAt])
   @@map("agenda_blocks")
 }
+
+/// Orçamento apresentado à paciente na consulta (fica no histórico dela).
+model Quote {
+  id            String    @id @default(cuid())
+  number        Int       @unique @default(autoincrement())
+  contactId     String
+  leadId        String?
+  status        String    @default("OPEN") // OPEN | APPROVED | REJECTED
+  items         Json
+  discountCents Int       @default(0)
+  totalCents    Int
+  validUntil    DateTime
+  paymentTerms  String?
+  notes         String?
+  saleIds       Json?
+  decidedAt     DateTime?
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([contactId])
+  @@index([createdAt])
+  @@map("quotes")
+}

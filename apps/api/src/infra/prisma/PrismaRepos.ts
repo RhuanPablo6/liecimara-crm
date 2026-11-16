@@ -445,6 +445,26 @@ export class PrismaRepos implements Repos {
     },
   };
 
+  quotes = {
+    create: async (d: any) => as<any>(await this.db.quote.create({ data: { ...d, items: json(d.items), saleIds: json(d.saleIds) } })),
+    update: async (id: string, d: any) =>
+      as<any>(
+        await this.db.quote.update({
+          where: { id },
+          data: { ...d, ...('items' in d ? { items: json(d.items) } : {}), ...('saleIds' in d ? { saleIds: json(d.saleIds) } : {}) },
+        }),
+      ),
+    findById: async (id: string) => as<any>(await this.db.quote.findUnique({ where: { id } })),
+    list: async (f: { contactId?: string; from?: Date; to?: Date }) =>
+      as<any>(
+        await this.db.quote.findMany({
+          where: { ...(f.contactId ? { contactId: f.contactId } : {}), ...(f.from || f.to ? { createdAt: { ...(f.from ? { gte: f.from } : {}), ...(f.to ? { lt: f.to } : {}) } } : {}) },
+          orderBy: { createdAt: 'desc' },
+          take: 500,
+        }),
+      ),
+  };
+
   agendaBlocks = {
     create: async (d: any) => as<any>(await this.db.agendaBlock.create({ data: d })),
     listBetween: async (from: Date, to: Date) =>
