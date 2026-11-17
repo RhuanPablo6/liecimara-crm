@@ -3,6 +3,7 @@
 // - Envio automático na véspera, a partir do horário escolhido; ou manual pela Agenda.
 // - O toque da paciente chega pelo webhook e atualiza a Agenda, com uma resposta automática.
 
+import type { MessageStatusEvent } from './events.js';
 import { DomainError } from '../../domain/errors.js';
 import type { Appointment } from '../../domain/types.js';
 import type { Repos } from '../../ports/repositories.js';
@@ -135,6 +136,48 @@ export class ConfirmationService {
   }
 
   /** Envia a confirmação de um agendamento. `force` reenvia mesmo se já foi enviada. */
+  /** Consulta no YCloud a situação da última confirmação do horário (para quando "não chegou"). */
+  async checkDelivery(appointmentId: string) {
+    const appt = await this.repos.appointments.findById(appointmentId);
+    if (!appt) throw new DomainError('NOT_FOUND', 'Agendamento não encontrado', 404);
+    const ref = appt.confirmationMessageId;
+    if (!ref) return { status: appt.confirmationError ? 'failed' : 'not_sent', detail: appt.confirmationError ?? 'Nenhuma confirmação enviada para este horário.' };
+    const p = await this.provider();
+    // Guardamos "ycloud:<id>" no envio; o YCloud aceita o próprio id (o wamid nem sempre).
+    const msg = ref.startsWith('ycloud:') ? await this.repos.messages.findByWaMessageId(ref) : await this.repos.messages.findByWaMessageId(ref);
+    const id = ref.startsWith('ycloud:') ? ref.slice(7) : ref;
+    const m = await p.getMessage(id);
+    if (m.status === 'failed') {
+      const reason = explainDeliveryError(m.errorCode, m.errorMessage);
+      await this.repos.appointments.update(appt.id, { confirmationSentAt: null, confirmationError: reason.slice(0, 300) });
+      if (msg) await this.repos.messages.update(msg.id, { status: 'failed' });
+      return { status: 'failed', detail: reason };
+    }
+    if (msg && m.status && m.status !== msg.status) await this.repos.messages.update(msg.id, { status: m.status });
+    const label: Record<string, string> = {
+      accepted: 'Aceita pelo YCloud, aguardando o WhatsApp enviar.',
+      sent: 'Enviada pelo WhatsApp, ainda não entregue no celular da paciente.',
+      delivered: 'Entregue no celular da paciente.',
+      read: 'Lida pela paciente.',
+    };
+    return { status: m.status, detail: label[m.status] ?? `Situação: ${m.status}` };
+  }
+
+  /** Status da mensagem de confirmação: falhou → mostra o motivo na Agenda; entregue/lida → guarda o wamid. */
+  async handleStatus(evt: MessageStatusEvent): Promise<string | null> {
+    let appt = evt.externalId ? await this.repos.appointments.findById(evt.externalId) : null;
+    if (appt && appt.confirmationMessageId && ![evt.waMessageId, `ycloud:${evt.providerMessageId}`].includes(appt.confirmationMessageId)) appt = null;
+    if (!appt) return null;
+    if (evt.status === 'failed') {
+      const e = evt.errors[0];
+      const reason = explainDeliveryError(e?.code ?? null, e?.title ?? null);
+      await this.repos.appointments.update(appt.id, { confirmationSentAt: null, confirmationError: reason.slice(0, 300), confirmationMessageId: evt.waMessageId });
+      return `confirmação não entregue: ${reason}`;
+    }
+    if (appt.confirmationMessageId !== evt.waMessageId) await this.repos.appointments.update(appt.id, { confirmationMessageId: evt.waMessageId, confirmationError: null });
+    return `confirmação ${evt.status}`;
+  }
+
   async send(appointmentId: string, opts: { force?: boolean } = {}): Promise<Appointment> {
     const appt = await this.repos.appointments.findById(appointmentId);
     if (!appt) throw new DomainError('NOT_FOUND', 'Agendamento não encontrado', 404);
@@ -251,4 +294,25 @@ export class ConfirmationService {
     }
     return `paciente respondeu ${action} pelo WhatsApp (agendamento ${appointmentId})`;
   }
+}
+
+/** Motivos mais comuns de não entrega (códigos da Meta), em português. */
+export function explainDeliveryError(code: number | null, title: string | null): string {
+  const map: Record<number, string> = {
+    131026: 'o número não recebe mensagens do WhatsApp (sem WhatsApp, app desatualizado ou não aceitou os termos)',
+    131049: 'a Meta segurou a mensagem para não cansar a paciente (limite de mensagens de empresas); tente mais tarde',
+    131042: 'problema de pagamento na conta do WhatsApp (verifique o saldo/forma de pagamento no YCloud)',
+    131047: 'fora da janela de 24 h (só modelos aprovados podem ser enviados)',
+    131048: 'limite de envio por denúncias de spam atingido',
+    131056: 'muitas mensagens para o mesmo número em pouco tempo',
+    132000: 'quantidade de variáveis diferente do modelo aprovado',
+    132001: 'modelo não encontrado nesse idioma',
+    132007: 'o texto enviado viola a política do modelo',
+    132012: 'formato das variáveis diferente do modelo aprovado',
+    130472: 'o número participa de um experimento da Meta e não recebe esse tipo de mensagem',
+    131000: 'erro desconhecido do WhatsApp; tente reenviar',
+    368: 'conta temporariamente bloqueada por política do WhatsApp',
+  };
+  const pt = code != null ? map[code] : undefined;
+  return `Não entregue${code ? ` (código ${code})` : ''}: ${pt ?? title ?? 'motivo não informado'}`;
 }

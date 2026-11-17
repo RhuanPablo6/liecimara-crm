@@ -148,6 +148,8 @@ export class YCloudAdapter implements WhatsAppProvider {
           status: m.status,
           recipientWaId: digits(m.to),
           errors: m.errorCode ? [{ code: Number(m.errorCode) || 0, title: String(m.errorMessage ?? m.errorCode) }] : [],
+          providerMessageId: m.id ? String(m.id) : null,
+          externalId: m.externalId ? String(m.externalId) : null,
         },
       ];
     }
@@ -214,6 +216,18 @@ export class YCloudAdapter implements WhatsAppProvider {
     });
     if (j?.status === 'failed') throw new GraphApiError(j?.errorMessage ?? 'Falha no envio', 400, null, null, false, j?.errorMessage ?? null);
     return { id: String(j?.id ?? ''), wamid: j?.wamid ? String(j.wamid) : null, status: String(j?.status ?? 'accepted') };
+  }
+
+  /** Situação de uma mensagem enviada (aceita, enviada, entregue, lida ou falhou + motivo). */
+  async getMessage(id: string) {
+    const j = await this.call('GET', `whatsapp/messages/${encodeURIComponent(id)}`);
+    return {
+      id: String(j?.id ?? id),
+      wamid: j?.wamid ? String(j.wamid) : null,
+      status: String(j?.status ?? 'unknown'),
+      errorCode: j?.errorCode != null ? Number(j.errorCode) || null : null,
+      errorMessage: j?.errorMessage ? String(j.errorMessage) : null,
+    };
   }
 
   async sendText(to: string, body: string) {

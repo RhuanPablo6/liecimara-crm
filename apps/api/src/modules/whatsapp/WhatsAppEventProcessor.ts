@@ -32,6 +32,8 @@ export type ProcessOutcome =
 export class WhatsAppEventProcessor {
   /** Trata o toque da paciente num botão (confirmação de agendamento). Ligado no container. */
   buttonHandler: ((evt: import('./events.js').InboundMessageEvent) => Promise<string | null>) | null = null;
+  /** Status da confirmação de agendamento (entregue, lida, falhou) vai para a Agenda. */
+  statusHandler: ((evt: MessageStatusEvent) => Promise<string | null>) | null = null;
 
   constructor(
     private readonly repos: Repos,
@@ -125,7 +127,14 @@ export class WhatsAppEventProcessor {
   }
 
   private async onStatus(evt: MessageStatusEvent, job?: JobRecord): Promise<string> {
-    const msg = await this.repos.messages.findByWaMessageId(evt.waMessageId);
+    const note = this.statusHandler ? await this.statusHandler(evt) : null;
+    let msg = await this.repos.messages.findByWaMessageId(evt.waMessageId);
+    // Enviada pelo parceiro antes de ter o wamid: estava guardada como "ycloud:<id>".
+    if (!msg && evt.providerMessageId) {
+      msg = await this.repos.messages.findByWaMessageId(`ycloud:${evt.providerMessageId}`);
+      if (msg) msg = await this.repos.messages.update(msg.id, { waMessageId: evt.waMessageId });
+    }
+    if (!msg && note) return note;
     if (!msg) {
       // Status pode chegar antes da mensagem (fora de ordem). Tenta de novo algumas vezes.
       if (job && job.attempts < job.maxAttempts) throw new RetryableError('mensagem do status ainda não registrada');

@@ -89,6 +89,11 @@ export function registerIntegrationRoutes(app: FastifyInstance, c: Container, gu
     return { ok: true, confirmationSentAt: a.confirmationSentAt ?? null };
   });
 
+  app.get('/appointments/:id/whatsapp-confirmation', { preHandler: guard('leads:read') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    return c.confirmations.checkDelivery(id);
+  });
+
   app.post('/integrations/whatsapp/:kind/diagnose', { preHandler: guard('integrations:read') }, async (req) => {
     const { kind } = kindParam.parse(req.params);
     return c.integrations.runDiagnostics(kind, req.user!.sub);

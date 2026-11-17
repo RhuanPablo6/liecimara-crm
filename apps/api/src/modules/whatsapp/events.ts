@@ -50,6 +50,9 @@ export interface MessageStatusEvent extends Base {
   status: string; // sent | delivered | read | failed
   recipientWaId: string | null;
   errors: { code: number; title: string }[];
+  /** Id da mensagem no parceiro (YCloud) e o externalId que mandamos no envio (id do agendamento). */
+  providerMessageId?: string | null;
+  externalId?: string | null;
 }
 
 export interface ContactSyncEvent extends Base {

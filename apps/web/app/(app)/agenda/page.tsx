@@ -554,6 +554,7 @@ function NewAppointment({
 function WhatsAppConfirm({ a, onDone }: { a: Appt; onDone: (changed: boolean) => void }) {
   const { data } = useApi<any>('/whatsapp/confirmations');
   const { busy, error, run } = useAction();
+  const [check, setCheck] = useState<{ status: string; detail: string } | null>(null);
   if (!data?.connected || data.template?.status !== 'APPROVED') return null;
   const sent = a.confirmationSentAt;
   return (
@@ -579,6 +580,29 @@ function WhatsAppConfirm({ a, onDone }: { a: Appt; onDone: (changed: boolean) =>
         </Button>
       </div>
       {a.confirmationError && !sent && <p className="text-xs text-red-700">Último envio falhou: {a.confirmationError}</p>}
+      {(sent || a.confirmationError) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            type="button"
+            disabled={busy}
+            className="text-navy-600 underline"
+            onClick={() =>
+              run(async () => {
+                const r = await api<{ status: string; detail: string }>(`/appointments/${a.id}/whatsapp-confirmation`);
+                setCheck(r);
+                if (r.status === 'failed') onDone(true);
+              })
+            }
+          >
+            Verificar entrega
+          </button>
+          {check && (
+            <span className={cn(check.status === 'failed' ? 'text-red-700' : check.status === 'delivered' || check.status === 'read' ? 'text-emerald-700' : 'text-muted-foreground')}>
+              {check.detail}
+            </span>
+          )}
+        </div>
+      )}
       <ErrorText>{error}</ErrorText>
     </div>
   );

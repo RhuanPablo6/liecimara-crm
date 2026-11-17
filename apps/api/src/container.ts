@@ -64,6 +64,7 @@ export function buildContainer(env: Env) {
   const appointmentSales = new AppointmentSaleService(repos, funnel);
   const confirmations = new ConfirmationService(repos, integrations, funnel, clock);
   processor.buttonHandler = (evt) => confirmations.handleButton(evt);
+  processor.statusHandler = (evt) => confirmations.handleStatus(evt);
 
   return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, recalls, auth, audit, ingestion, processor, integrations, metaSync, adsManager, confirmations, quotes, pricing, clinical, appointmentSales };
 }
