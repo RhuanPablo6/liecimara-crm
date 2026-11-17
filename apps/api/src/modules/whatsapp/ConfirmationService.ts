@@ -312,6 +312,8 @@ export function explainDeliveryError(code: number | null, title: string | null):
     130472: 'o número participa de um experimento da Meta e não recebe esse tipo de mensagem',
     131000: 'erro desconhecido do WhatsApp; tente reenviar',
     368: 'conta temporariamente bloqueada por política do WhatsApp',
+    10: 'o YCloud não tem permissão da Meta para enviar mensagens por este número (permissão do parceiro na conta do WhatsApp)',
+    200: 'o YCloud não tem permissão da Meta para enviar mensagens por este número',
   };
   const pt = code != null ? map[code] : undefined;
   return `Não entregue${code ? ` (código ${code})` : ''}: ${pt ?? title ?? 'motivo não informado'}`;
