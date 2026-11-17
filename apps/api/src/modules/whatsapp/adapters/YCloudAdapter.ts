@@ -242,9 +242,11 @@ export class YCloudAdapter implements WhatsAppProvider {
 
   /** WABA do número (guardada na conexão; se faltar, consulta o YCloud). */
   async wabaId(): Promise<string> {
-    if (this.cfg.wabaId) return this.cfg.wabaId;
-    const j = await this.call('GET', 'whatsapp/phoneNumbers?limit=100');
+    // Consulta sempre o YCloud: se o número for reconectado numa conta (WABA) nova, os modelos vão para a certa.
+    const j = await this.call('GET', 'whatsapp/phoneNumbers?limit=100').catch(() => null);
     const n = (j?.items ?? []).find((x: any) => digits(x.phoneNumber) === digits(this.cfg.phoneNumber));
+    if (n?.wabaId) return String(n.wabaId);
+    if (this.cfg.wabaId) return this.cfg.wabaId;
     if (!n?.wabaId) throw new GraphApiError('Conta do WhatsApp (WABA) não encontrada no YCloud', 400, null, null, false, 'Conta do WhatsApp (WABA) não encontrada no YCloud');
     return String(n.wabaId);
   }
