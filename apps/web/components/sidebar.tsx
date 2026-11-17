@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useMe } from '@/components/access';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { ChangePasswordDialog } from '@/components/change-password';
 import { cn } from '@/lib/utils';
 
@@ -90,7 +91,10 @@ export function Sidebar() {
         </div>
         {nav}
         <div className="border-t border-white/10 px-6 pt-4">
-          <p className="truncate text-sm text-navy-100">{me?.user.name ?? ' '}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-sm text-navy-100">{me?.user.name ?? ' '}</p>
+            <ThemeToggle />
+          </div>
           <div className="mt-2 flex items-center gap-4">
             <button onClick={() => setPwd(true)} className="flex items-center gap-2 text-xs text-navy-200 hover:text-white">
               <KeyRound className="h-3.5 w-3.5" /> Alterar senha
