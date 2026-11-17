@@ -100,7 +100,7 @@ export class ConfirmationService {
     if (p) {
       try {
         const t = await p.findTemplate(s.templateName, s.language);
-        template = t ? { status: String(t.status ?? 'PENDING'), reason: t.reason ?? null } : null;
+        template = t ? { status: String(t.status ?? 'PENDING'), reason: t.reason && String(t.reason).toUpperCase() !== 'NONE' ? String(t.reason) : null } : null;
       } catch (e) {
         templateError = (e as Error).message;
       }

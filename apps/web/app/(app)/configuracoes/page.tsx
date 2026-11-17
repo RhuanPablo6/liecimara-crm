@@ -74,7 +74,7 @@ function ConfirmationsCard() {
             ))}
           </div>
         </div>
-        {data.template?.reason && <p className="text-red-700">Motivo da recusa: {data.template.reason}</p>}
+        {data.template?.status === 'REJECTED' && data.template?.reason && data.template.reason !== 'NONE' && <p className="text-red-700">Motivo da recusa: {data.template.reason}</p>}
         {data.templateError && <p className="text-red-700">{data.templateError}</p>}
         {!data.template && (
           <Button disabled={act.busy} onClick={() => act.run(async () => (await api('/whatsapp/confirmations/template', { method: 'POST' }), await reload()))}>
