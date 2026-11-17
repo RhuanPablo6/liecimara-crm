@@ -1,5 +1,7 @@
 'use client';
 
+import { adLabel, pickableAds } from '@/lib/ads';
+import { RecentAdsToggle } from '@/components/recent-ads-toggle';
 import { Plus, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -31,9 +33,9 @@ function NewLeadDialog() {
 
   const code = adCode.trim().toUpperCase().replace(/^[([{]+|[)\]}]+$/g, '');
   const matched = code ? (ads ?? []).find((a) => a.code === code) : null;
-  const pickable = (ads ?? [])
-    .filter((a) => a.status === 'ACTIVE' || a.code)
-    .sort((a, b) => `${a.code ?? '~'}|${a.name}`.localeCompare(`${b.code ?? '~'}|${b.name}`, 'pt-BR'));
+  const [recent, setRecent] = useState(false);
+  const pickable = pickableAds(ads, { includeRecent: recent, keep: adMetaId || matched?.metaId });
+  const recentCount = pickableAds(ads, { includeRecent: true }).length - pickableAds(ads).length;
 
   return (
     <Dialog>
@@ -102,11 +104,11 @@ function NewLeadDialog() {
               <option value="">Origem não informada</option>
               {pickable.map((a) => (
                 <option key={a.metaId} value={a.metaId}>
-                  {a.code ? `[${a.code}] ` : ''}
-                  {a.name}
+                  {adLabel(a)}
                 </option>
               ))}
             </NativeSelect>
+            <RecentAdsToggle value={recent} onChange={setRecent} count={recentCount} />
           </Field>
         )}
         <label className="flex items-center gap-2 text-sm">

@@ -20,6 +20,8 @@ import { PurgeButton } from '@/components/purge-dialog';
 import { AppointmentSaleFields, type SalePayload } from '@/components/appointment-sale-fields';
 import { EditNameButton } from '@/components/edit-name';
 import { useMe } from '@/components/access';
+import { adLabel, pickableAds } from '@/lib/ads';
+import { RecentAdsToggle } from '@/components/recent-ads-toggle';
 
 const METHODS = [
   ['PIX', 'Pix'],
@@ -110,6 +112,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [apptAt, setApptAt] = useState('');
   const [apptProc, setApptProc] = useState<string | null>(null);
   const [apptSale, setApptSale] = useState<SalePayload>(null);
+  const [recentAds, setRecentAds] = useState(false);
   const [apptSaleErr, setApptSaleErr] = useState<string | null>(null);
   const me = useMe();
   const canSell = !!me?.permissions.includes('sales:write');
@@ -296,13 +299,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                       <Field label="Anúncio">
                         <NativeSelect value={attrAd} onChange={(e) => setAttrAd(e.target.value)}>
                           <option value="">Selecione…</option>
-                          {ads?.map((a) => (
+                          {pickableAds(ads, { includeRecent: recentAds, keep: attrAd }).map((a) => (
                             <option key={a.metaId} value={a.metaId}>
-                              {a.code ? `[${a.code}] ` : ''}
-                              {a.name} — {a.campaignName}
+                              {adLabel(a, true)}
                             </option>
                           ))}
                         </NativeSelect>
+                        <RecentAdsToggle value={recentAds} onChange={setRecentAds} count={pickableAds(ads, { includeRecent: true }).length - pickableAds(ads).length} />
                       </Field>
                       <Field label="Como foi confirmado?">
                         <Chips
@@ -462,13 +465,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                           <div className="mt-3 space-y-3">
                             <NativeSelect value={saleAd} onChange={(e) => setSaleAd(e.target.value)}>
                               <option value="">Não informar</option>
-                              {ads?.map((a) => (
+                              {pickableAds(ads, { includeRecent: recentAds, keep: saleAd }).map((a) => (
                                 <option key={a.metaId} value={a.metaId}>
-                                  {a.code ? `[${a.code}] ` : ''}
-                                  {a.name}
+                                  {adLabel(a)}
                                 </option>
                               ))}
                             </NativeSelect>
+                            <RecentAdsToggle value={recentAds} onChange={setRecentAds} count={pickableAds(ads, { includeRecent: true }).length - pickableAds(ads).length} />
                             {saleAd && <Input placeholder="Como foi confirmado?" value={saleNote} onChange={(e) => setSaleNote(e.target.value)} />}
                           </div>
                         </details>

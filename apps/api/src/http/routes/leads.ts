@@ -444,12 +444,26 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
   });
 
   app.get('/ads', { preHandler: guard('app:use') }, async () => {
-    const [ads, campaigns] = await Promise.all([c.repos.ads.listAds(), c.repos.ads.listCampaigns()]);
+    const since = new Date(Date.now() - 60 * 86_400_000);
+    const [ads, campaigns, insights] = await Promise.all([
+      c.repos.ads.listAds(),
+      c.repos.ads.listCampaigns(),
+      c.repos.ads.listInsights({ from: since, to: new Date(Date.now() + 86_400_000) }),
+    ]);
     const cn = new Map(campaigns.map((x) => [x.metaId, x.name]));
+    // Último dia em que o anúncio rodou (gasto ou impressões), para listar pausados recentes.
+    const lastDay = new Map<string, string>();
+    for (const i of insights) {
+      if (i.spendCents <= 0 && i.impressions <= 0) continue;
+      if ((lastDay.get(i.adMetaId) ?? '') < i.date) lastDay.set(i.adMetaId, i.date);
+    }
     return ads.map((a) => ({
       ...a,
       campaignName: cn.get(a.campaignMetaId) ?? null,
       suggestedMessage: a.code ? suggestedMessage(a.code) : null,
+      /** Veiculando agora (anúncio, conjunto e campanha ativos no Gerenciador). */
+      active: (a.effectiveStatus ?? a.status) === 'ACTIVE',
+      lastDeliveryDay: lastDay.get(a.metaId) ?? null,
     }));
   });
 

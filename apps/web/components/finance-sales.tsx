@@ -12,6 +12,8 @@ import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { api, useAction, useApi } from '@/lib/api';
 import { brl, date, parseBRL, phone } from '@/lib/format';
 import { ORGANIC_ORIGINS, ORIGIN_NOTE_HINT } from '@/lib/origins';
+import { adLabel, pickableAds } from '@/lib/ads';
+import { RecentAdsToggle } from '@/components/recent-ads-toggle';
 
 export const SALE_METHODS: Record<string, string> = {
   PIX: 'Pix',
@@ -87,6 +89,7 @@ export function NewSaleDialog({ onSaved }: { onSaved: () => void }) {
 function SaleForm({ onDone }: { onDone: () => void }) {
   const { data: procedures } = useApi<any[]>('/procedures');
   const { data: ads } = useApi<any[]>('/ads');
+  const [recentAds, setRecentAds] = useState(false);
   const [waId, setWaId] = useState('55');
   const [patient, setPatient] = useState<any>(null);
   const [name, setName] = useState('');
@@ -197,15 +200,13 @@ function SaleForm({ onDone }: { onDone: () => void }) {
           <Field label="Qual anúncio?">
             <NativeSelect value={adMetaId} onChange={(e) => setAdMetaId(e.target.value)}>
               <option value="">Não sabe qual</option>
-              {(ads ?? [])
-                .filter((a) => a.status === 'ACTIVE' || a.code)
-                .map((a) => (
-                  <option key={a.metaId} value={a.metaId}>
-                    {a.code ? `[${a.code}] ` : ''}
-                    {a.name}
-                  </option>
-                ))}
+              {pickableAds(ads, { includeRecent: recentAds, keep: adMetaId }).map((a) => (
+                <option key={a.metaId} value={a.metaId}>
+                  {adLabel(a)}
+                </option>
+              ))}
             </NativeSelect>
+            <RecentAdsToggle value={recentAds} onChange={setRecentAds} count={pickableAds(ads, { includeRecent: true }).length - pickableAds(ads).length} />
           </Field>
         )}
       </div>
