@@ -9,6 +9,7 @@ import { FunnelService } from '../src/modules/funnel/FunnelService.js';
 import { QuoteService } from '../src/modules/quotes/QuoteService.js';
 import { PricingService } from '../src/modules/pricing/PricingService.js';
 import { ClinicalService } from '../src/modules/clinical/ClinicalService.js';
+import { AppointmentSaleService } from '../src/modules/funnel/AppointmentSales.js';
 import { MetricsService } from '../src/modules/metrics/MetricsService.js';
 import { MetaSyncService, META_SYNC_JOB } from '../src/modules/meta/MetaSyncService.js';
 import { AdsManagerService } from '../src/modules/meta/AdsManagerService.js';
@@ -53,6 +54,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
   const quotes = new QuoteService(repos, funnel, clock);
   const pricing = new PricingService(repos, clock);
   const clinical = new ClinicalService(repos, clock, 'segredo-teste');
+  const appointmentSales = new AppointmentSaleService(repos, funnel);
   const metrics = new MetricsService(repos);
   const finance = new FinanceService(repos);
   const accounts = new AccountsService(repos);
@@ -83,7 +85,7 @@ export function buildWorld(start = '2026-11-02T12:00:00.000Z') {
     return ingestion.ingest(provider, raw, headers);
   }
 
-  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, finance, accounts, goals, patients, recalls, metaSync, adsManager, integrations, provider, worker, deliver, quotes, pricing, clinical };
+  return { repos, clock, queue, http, vault, engine, processor, ingestion, funnel, metrics, finance, accounts, goals, patients, recalls, metaSync, adsManager, integrations, provider, worker, deliver, quotes, pricing, clinical, appointmentSales };
 }
 
 export type World = ReturnType<typeof buildWorld>;

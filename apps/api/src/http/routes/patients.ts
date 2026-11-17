@@ -43,6 +43,17 @@ export function registerPatientRoutes(app: FastifyInstance, c: Container, guard:
     });
   });
 
+  /** Corrigir o nome (ex.: veio do WhatsApp como emoji ou apelido). Vale para lead, agenda, financeiro e relatórios. */
+  app.patch('/contacts/:contactId', { preHandler: guard('leads:write') }, async (req) => {
+    const { contactId } = z.object({ contactId: z.string().min(1) }).parse(req.params);
+    const { name } = z.object({ name: z.string().trim().min(2, 'Informe o nome').max(120) }).parse(req.body);
+    const before = await c.repos.contacts.findById(contactId);
+    if (!before) throw new DomainError('NOT_FOUND', 'Paciente não encontrada', 404);
+    const updated = await c.repos.contacts.update(contactId, { name });
+    await c.audit.record({ userId: req.user!.sub, action: 'contact.rename', entityType: 'Contact', entityId: contactId, before: { name: before.name, profileName: before.profileName }, after: { name }, ip: req.ip });
+    return updated;
+  });
+
   app.get('/patients/:contactId', { preHandler: guard('leads:read') }, async (req) => {
     const { contactId } = z.object({ contactId: z.string().min(1) }).parse(req.params);
     const d = await c.patients.detail(contactId);

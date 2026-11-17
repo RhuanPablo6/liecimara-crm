@@ -9,7 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorText, Field, Input, NativeSelect, Textarea } from '@/components/ui/form';
 import { api, useAction, useApi } from '@/lib/api';
-import { phone } from '@/lib/format';
+import { brl, parseBRL, phone } from '@/lib/format';
+import { AppointmentSaleFields, type OpenSale, type SalePayload } from '@/components/appointment-sale-fields';
+import { PaymentFields } from '@/components/finance-sales';
+import { EditNameButton } from '@/components/edit-name';
+import { useMe } from '@/components/access';
 import { ORGANIC_ORIGINS } from '@/lib/origins';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '@/components/confirm-button';
@@ -66,6 +70,7 @@ type Appt = {
   patientNote: string | null;
   confirmationSentAt?: string | null;
   confirmationError?: string | null;
+  sale?: (OpenSale & { performed: boolean; status: string }) | null;
 };
 
 type Block = { id: string; startAt: string; endAt: string; allDay: boolean; reason: string; note: string | null };
@@ -332,7 +337,7 @@ function NewAppointment({
   procedures,
   onDone,
 }: {
-  init: { day: string; time: string; leadId?: string; name?: string };
+  init: { day: string; time: string; leadId?: string; name?: string; procedureId?: string };
   blocks: Block[];
   appts: Appt[];
   procedures: any[];
@@ -345,12 +350,25 @@ function NewAppointment({
   const [name, setName] = useState('');
   const [waId, setWaId] = useState('55');
   const [origin, setOrigin] = useState('');
-  const [procedureId, setProcedureId] = useState('');
+  const [procedureId, setProcedureId] = useState(init.procedureId ?? '');
+  const [sale, setSale] = useState<SalePayload>(null);
+  const [saleError, setSaleError] = useState<string | null>(null);
+  const [openSales, setOpenSales] = useState<OpenSale[]>([]);
+  const me = useMe();
+  const canSell = !!me?.permissions.includes('sales:write');
+  const canPay = !!me?.permissions.includes('payments:write');
   const [day, setDay] = useState(init.day);
   const [time, setTime] = useState(init.time);
   const [duration, setDuration] = useState('60');
   const [notes, setNotes] = useState('');
   const { busy, error, run } = useAction();
+
+  // Vendas já lançadas da paciente (ex.: orçamento aprovado) para vincular ao horário.
+  useEffect(() => {
+    if (mode !== 'existing' || !picked?.leadId) return setOpenSales([]);
+    if (picked.openSales) return setOpenSales(picked.openSales);
+    api<OpenSale[]>(`/leads/${picked.leadId}/open-sales`).then(setOpenSales, () => setOpenSales([]));
+  }, [picked, mode]);
 
   useEffect(() => {
     if (mode !== 'existing' || picked || query.trim().length < 2) return setResults([]);
@@ -364,7 +382,7 @@ function NewAppointment({
   const clash = overlaps(appts, day, h! * 60 + m!, Number(duration));
   const blocked = blockedAt(blocks, day, h! * 60 + m!, Number(duration));
   const [force, setForce] = useState(false);
-  const ready = (mode === 'existing' ? !!picked?.leadId : waId.length >= 12) && !!day && !!time && (!blocked.length || force);
+  const ready = (mode === 'existing' ? !!picked?.leadId : waId.length >= 12) && !!day && !!time && (!blocked.length || force) && (!canSell || !saleError);
 
   return (
     <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto">
@@ -485,6 +503,19 @@ function NewAppointment({
       <Field label="Observações (opcional)">
         <Textarea className="min-h-[60px]" placeholder="ex.: retorno do Botox, trazer exames" value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
+      {canSell && (
+        <AppointmentSaleFields
+          procedureId={procedureId}
+          procedures={procedures}
+          openSales={mode === 'existing' ? openSales : []}
+          canPay={canPay}
+          onChange={(p, err) => {
+            setSale(p);
+            setSaleError(err);
+          }}
+        />
+      )}
+      {canSell && saleError && <p className="text-xs text-amber-700">{saleError}</p>}
       {clash.length > 0 && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
           Já existe agendamento nesse horário: {clash.map((c) => `${hhmm(spMinutes(c.scheduledFor))} ${c.name ?? ''}`).join(', ')}. Dá para marcar mesmo assim.
@@ -505,6 +536,7 @@ function NewAppointment({
                 durationMin: Number(duration),
                 notes: notes || null,
                 ignoreBlock: blocked.length > 0 && force,
+                sale: canSell ? sale : null,
               },
             });
             onDone(true);
@@ -554,6 +586,173 @@ function WhatsAppConfirm({ a, onDone }: { a: Appt; onDone: (changed: boolean) =>
 
 // ── Detalhes / ações ──────────────────────────────────────────
 
+/** Valor, pagamentos e saldo do horário (a mesma venda do Lead e do Financeiro). */
+function AppointmentMoney({ a, procedures, onDone }: { a: Appt; procedures: any[]; onDone: (changed: boolean) => void }) {
+  const me = useMe();
+  const canSell = !!me?.permissions.includes('sales:write');
+  const canPay = !!me?.permissions.includes('payments:write');
+  const [adding, setAdding] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payload, setPayload] = useState<SalePayload>(null);
+  const [payErr, setPayErr] = useState<string | null>(null);
+  const [openSales, setOpenSales] = useState<OpenSale[]>([]);
+  const [value, setValue] = useState('');
+  const [method, setMethod] = useState('PIX');
+  const [installments, setInstallments] = useState('1');
+  const { busy, error, run } = useAction();
+  const s = a.sale;
+
+  useEffect(() => {
+    if (adding) api<OpenSale[]>(`/leads/${a.leadId}/open-sales`).then(setOpenSales, () => setOpenSales([]));
+  }, [adding, a.leadId]);
+
+  if (!s) {
+    if (!canSell || a.status === 'CANCELED') return null;
+    return (
+      <div className="space-y-2 border-t pt-3">
+        {!adding ? (
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-muted-foreground">Sem valor lançado para este horário.</span>
+            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+              Lançar valor
+            </Button>
+          </div>
+        ) : (
+          <>
+            <AppointmentSaleFields
+              procedureId={a.procedureId ?? ''}
+              procedures={procedures}
+              openSales={openSales}
+              canPay={canPay}
+              onChange={(p, err) => {
+                setPayload(p);
+                setPayErr(err);
+              }}
+            />
+            {payErr && <p className="text-xs text-amber-700">{payErr}</p>}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={busy || !payload || !!payErr}
+                onClick={() =>
+                  run(async () => {
+                    await api(`/appointments/${a.id}/sale`, { method: 'POST', body: payload });
+                    onDone(true);
+                  })
+                }
+              >
+                Salvar valor
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>
+                Voltar
+              </Button>
+            </div>
+            <ErrorText>{error}</ErrorText>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <div className="grid grid-cols-3 gap-2 text-center text-sm">
+        <div className="rounded-md bg-secondary/60 px-2 py-1.5">
+          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Valor</p>
+          <p className="font-semibold tabular-nums">{brl(s.amountCents)}</p>
+        </div>
+        <div className="rounded-md bg-emerald-50 px-2 py-1.5">
+          <p className="text-[11px] uppercase tracking-wide text-emerald-800">Pago</p>
+          <p className="font-semibold tabular-nums text-emerald-800">{brl(s.paidCents)}</p>
+        </div>
+        <div className={cn('rounded-md px-2 py-1.5', s.balanceCents > 0 ? 'bg-amber-50' : 'bg-secondary/60')}>
+          <p className={cn('text-[11px] uppercase tracking-wide', s.balanceCents > 0 ? 'text-amber-800' : 'text-muted-foreground')}>Saldo</p>
+          <p className={cn('font-semibold tabular-nums', s.balanceCents > 0 && 'text-amber-800')}>{brl(s.balanceCents)}</p>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {s.procedureName ?? 'Venda'} · mesma venda do atendimento e do Financeiro{s.status !== 'ACTIVE' ? ' (cancelada)' : ''}
+        {s.performed ? ' · procedimento realizado ✓' : ''}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {canPay && s.balanceCents > 0 && s.status === 'ACTIVE' && !paying && (
+          <Button
+            size="sm"
+            variant="gold"
+            onClick={() => {
+              setValue((s.balanceCents / 100).toFixed(2).replace('.', ','));
+              setPaying(true);
+            }}
+          >
+            Receber pagamento
+          </Button>
+        )}
+        {a.status === 'ATTENDED' && !s.performed && s.status === 'ACTIVE' && (
+          <ConfirmButton
+            size="sm"
+            variant="outline"
+            confirmLabel="Confirmar realizado?"
+            disabled={busy}
+            onConfirm={() =>
+              run(async () => {
+                await api(`/leads/${a.leadId}/procedures-performed`, { method: 'POST', body: { procedureId: s.procedureId, saleId: s.id } });
+                onDone(true);
+              })
+            }
+          >
+            <Check /> Procedimento realizado
+          </ConfirmButton>
+        )}
+        {canSell && (
+          <ConfirmButton
+            size="sm"
+            variant="ghost"
+            className="ml-auto text-muted-foreground"
+            confirmLabel="Desvincular? (a venda continua)"
+            onConfirm={() =>
+              run(async () => {
+                await api(`/appointments/${a.id}/sale`, { method: 'DELETE' });
+                onDone(true);
+              })
+            }
+          >
+            Desvincular
+          </ConfirmButton>
+        )}
+      </div>
+      {paying && (
+        <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-3 sm:items-end">
+          <Field label={`Valor (saldo ${brl(s.balanceCents)})`}>
+            <Input inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />
+          </Field>
+          <PaymentFields method={method} setMethod={setMethod} installments={installments} setInstallments={setInstallments} />
+          <div className="flex gap-2 sm:col-span-3">
+            <Button
+              size="sm"
+              disabled={busy || !parseBRL(value)}
+              onClick={() =>
+                run(async () => {
+                  await api(`/sales/${s.id}/payments`, {
+                    method: 'POST',
+                    body: { amountCents: parseBRL(value), method, installments: method === 'CREDIT_CARD' ? Number(installments) : 1 },
+                  });
+                  onDone(true);
+                })
+              }
+            >
+              Confirmar pagamento
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setPaying(false)}>
+              Voltar
+            </Button>
+          </div>
+        </div>
+      )}
+      <ErrorText>{error}</ErrorText>
+    </div>
+  );
+}
+
 function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt; appts: Appt[]; blocks: Block[]; procedures: any[]; onDone: (changed: boolean) => void }) {
   const [editing, setEditing] = useState(false);
   const [day, setDay] = useState(spDayOf(a.scheduledFor));
@@ -582,7 +781,10 @@ function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt;
   return (
     <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto">
       <DialogHeader>
-        <DialogTitle>{a.name ?? 'Paciente'}</DialogTitle>
+        <DialogTitle className="flex items-center gap-1">
+          {a.name ?? 'Paciente'}
+          {a.contactId && <EditNameButton contactId={a.contactId} name={a.name} onSaved={() => onDone(true)} />}
+        </DialogTitle>
       </DialogHeader>
       <div className="space-y-1 text-sm">
         <p>
@@ -643,6 +845,7 @@ function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt;
           </Button>
         </div>
       )}
+      {!editing && !canceling && <AppointmentMoney a={a} procedures={procedures} onDone={onDone} />}
       {open && !editing && !canceling && <WhatsAppConfirm a={a} onDone={onDone} />}
       {open && !editing && !canceling && (
         <MessageButton
@@ -751,7 +954,7 @@ function AppointmentDetails({ a, appts, blocks, procedures, onDone }: { a: Appt;
           </Link>
         )}
         <Link className="text-navy-600 hover:underline" href={`/leads/${a.leadId}`}>
-          Atendimento (registrar venda)
+          Atendimento completo
         </Link>
         <PurgeButton
           className="ml-auto h-7 text-red-700"
@@ -773,7 +976,7 @@ export default function AgendaPage() {
   const [anchor, setAnchor] = useState(todaySP());
   const [showCanceled, setShowCanceled] = useState(false);
   const [sunday, setSunday] = useState(false);
-  const [creating, setCreating] = useState<{ day: string; time: string; leadId?: string; name?: string } | null>(null);
+  const [creating, setCreating] = useState<{ day: string; time: string; leadId?: string; name?: string; procedureId?: string } | null>(null);
   const [selected, setSelected] = useState<Appt | null>(null);
   const [closing, setClosing] = useState(false);
   const [selBlock, setSelBlock] = useState<Block | null>(null);
@@ -785,7 +988,7 @@ export default function AgendaPage() {
     if (window.innerWidth < 768) setView('day');
     // Vindo de "Agendar" (Retornos, ficha do lead): já abre com a paciente escolhida.
     const sp = new URLSearchParams(window.location.search);
-    if (sp.get('lead')) setCreating({ day: todaySP(), time: '09:00', leadId: sp.get('lead')!, name: sp.get('name') ?? undefined });
+    if (sp.get('lead')) setCreating({ day: todaySP(), time: '09:00', leadId: sp.get('lead')!, name: sp.get('name') ?? undefined, procedureId: sp.get('proc') ?? undefined });
     const t = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(t);
   }, []);

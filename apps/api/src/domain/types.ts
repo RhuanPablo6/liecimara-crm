@@ -306,6 +306,8 @@ export interface Appointment {
   id: string;
   leadId: string;
   procedureId: string | null;
+  /** Venda paga por este horário. */
+  saleId?: string | null;
   scheduledFor: Date;
   /** Duração prevista em minutos (padrão 60). */
   durationMin?: number;

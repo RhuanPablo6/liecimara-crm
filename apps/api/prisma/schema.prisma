@@ -325,6 +325,8 @@ model Appointment {
   id            String            @id @default(cuid())
   leadId        String
   procedureId   String?
+  /// Venda paga por este horário (valor, pagamentos e saldo aparecem na Agenda)
+  saleId        String?
   scheduledFor  DateTime
   /// Duração prevista (minutos) para a agenda
   durationMin   Int               @default(60)
@@ -347,6 +349,7 @@ model Appointment {
 
   @@index([leadId])
   @@index([scheduledFor])
+  @@index([saleId])
   @@map("appointments")
 }
 

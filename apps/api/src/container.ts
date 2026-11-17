@@ -17,6 +17,7 @@ import { FunnelService } from './modules/funnel/FunnelService.js';
 import { QuoteService } from './modules/quotes/QuoteService.js';
 import { PricingService } from './modules/pricing/PricingService.js';
 import { ClinicalService } from './modules/clinical/ClinicalService.js';
+import { AppointmentSaleService } from './modules/funnel/AppointmentSales.js';
 import { IntegrationService } from './modules/integrations/IntegrationService.js';
 import { AdsManagerService } from './modules/meta/AdsManagerService.js';
 import { MetaSyncService } from './modules/meta/MetaSyncService.js';
@@ -60,10 +61,11 @@ export function buildContainer(env: Env) {
   const quotes = new QuoteService(repos, funnel, clock);
   const pricing = new PricingService(repos, clock);
   const clinical = new ClinicalService(repos, clock, env.JWT_SECRET);
+  const appointmentSales = new AppointmentSaleService(repos, funnel);
   const confirmations = new ConfirmationService(repos, integrations, funnel, clock);
   processor.buttonHandler = (evt) => confirmations.handleButton(evt);
 
-  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, recalls, auth, audit, ingestion, processor, integrations, metaSync, adsManager, confirmations, quotes, pricing, clinical };
+  return { env, prisma, repos, clock, queue, vault, engine, funnel, metrics, finance, accounts, goals, patients, recalls, auth, audit, ingestion, processor, integrations, metaSync, adsManager, confirmations, quotes, pricing, clinical, appointmentSales };
 }
 
 export type Container = ReturnType<typeof buildContainer>;

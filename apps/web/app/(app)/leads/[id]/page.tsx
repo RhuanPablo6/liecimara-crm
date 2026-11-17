@@ -17,6 +17,9 @@ import { brl, date, dateTime, parseBRL, phone } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { ConfirmButton } from '@/components/confirm-button';
 import { PurgeButton } from '@/components/purge-dialog';
+import { AppointmentSaleFields, type SalePayload } from '@/components/appointment-sale-fields';
+import { EditNameButton } from '@/components/edit-name';
+import { useMe } from '@/components/access';
 
 const METHODS = [
   ['PIX', 'Pix'],
@@ -106,6 +109,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   // Estados dos formulários rápidos
   const [apptAt, setApptAt] = useState('');
   const [apptProc, setApptProc] = useState<string | null>(null);
+  const [apptSale, setApptSale] = useState<SalePayload>(null);
+  const [apptSaleErr, setApptSaleErr] = useState<string | null>(null);
+  const me = useMe();
+  const canSell = !!me?.permissions.includes('sales:write');
+  const canPay = !!me?.permissions.includes('payments:write');
   const [saleProc, setSaleProc] = useState('');
   const [saleValue, setSaleValue] = useState('');
   const [saleAd, setSaleAd] = useState('');
@@ -124,6 +132,21 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   if (!data) return <p className="text-muted-foreground">Carregando…</p>;
   const { lead, contact, ad, evidence, appointments, sales, performed, reminders, messages } = data;
   const procName = (pid: string | null) => procedures?.find((p) => p.id === pid)?.name ?? '—';
+  // Vendas ainda em uso (saldo ou procedimento não realizado): o novo horário pode usar a mesma venda.
+  const openSales = (sales as any[])
+    .filter((s) => s.status === 'ACTIVE')
+    .map((s) => ({
+      id: s.id,
+      procedureId: s.procedureId,
+      procedureName: procName(s.procedureId),
+      amountCents: s.amountCents,
+      paidCents: s.paidCents,
+      balanceCents: Math.max(0, s.amountCents - s.paidCents),
+      performed: performed.some((p: any) => p.saleId === s.id),
+      linkedAppointments: appointments.filter((a: any) => a.saleId === s.id && a.status !== 'CANCELED').length,
+    }))
+    .filter((s) => s.balanceCents > 0 || !s.performed);
+  const nextAppt = (appointments as any[]).find((a) => (a.status === 'SCHEDULED' || a.status === 'CONFIRMED') && a.procedureId);
 
   const call = (fn: () => Promise<unknown>, close?: () => void) =>
     act.run(async () => {
@@ -143,7 +166,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-navy-800">{contact?.name ?? contact?.profileName ?? 'Sem nome'}</h1>
+          <h1 className="flex items-center gap-1 text-3xl font-semibold text-navy-800">
+            {contact?.name ?? contact?.profileName ?? 'Sem nome'}
+            {contact?.id && <EditNameButton contactId={contact.id} name={contact?.name ?? contact?.profileName ?? null} onSaved={() => void reload()} />}
+          </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <span>{phone(contact?.waId)}</span>
             {contact?.waId && (
@@ -359,14 +385,27 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                             ))}
                         </NativeSelect>
                       </Field>
+                      {canSell && (
+                        <AppointmentSaleFields
+                          procedureId={(apptProc ?? lead.procedureInterestId) || ''}
+                          procedures={procedures ?? []}
+                          openSales={openSales}
+                          canPay={canPay}
+                          onChange={(p, err) => {
+                            setApptSale(p);
+                            setApptSaleErr(err);
+                          }}
+                        />
+                      )}
+                      {canSell && apptSaleErr && <p className="text-xs text-amber-700">{apptSaleErr}</p>}
                       <Button
-                        disabled={!apptAt || act.busy}
+                        disabled={!apptAt || act.busy || (canSell && !!apptSaleErr)}
                         onClick={() =>
                           call(
                             () =>
                               api(`/leads/${id}/appointments`, {
                                 method: 'POST',
-                                body: { scheduledFor: apptAt, procedureId: (apptProc ?? lead.procedureInterestId) || null },
+                                body: { scheduledFor: apptAt, procedureId: (apptProc ?? lead.procedureInterestId) || null, sale: canSell ? apptSale : null },
                               }),
                             close,
                           )
@@ -381,7 +420,16 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 <ActionDialog
                   title="Registrar venda"
                   trigger={
-                    <Button variant="gold">
+                    <Button
+                      variant="gold"
+                      onClick={() => {
+                        // Já vem com o procedimento do próximo horário (ou o de interesse) e o preço de tabela.
+                        const pid = saleProc || nextAppt?.procedureId || lead.procedureInterestId || '';
+                        setSaleProc(pid);
+                        const p = procedures?.find((x) => x.id === pid);
+                        if (!saleValue && p?.defaultPriceCents) setSaleValue((p.defaultPriceCents / 100).toFixed(2).replace('.', ','));
+                      }}
+                    >
                       <CircleDollarSign /> Registrar venda
                     </Button>
                   }
@@ -535,6 +583,17 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     <p className="text-sm font-medium">{dateTime(a.scheduledFor)}</p>
                     <p className="text-xs text-muted-foreground">
                       {procName(a.procedureId)} · {a.status === 'CANCELED' ? `Cancelado: ${a.cancelReason}` : (APPT_LABEL[a.status] ?? a.status)}
+                      {(() => {
+                        const sv = a.saleId ? (sales as any[]).find((x) => x.id === a.saleId) : null;
+                        if (!sv) return null;
+                        const bal = sv.amountCents - sv.paidCents;
+                        return (
+                          <span className="ml-1 font-medium text-navy-700">
+                            · {brl(sv.amountCents)}
+                            {bal > 0 ? ` (saldo ${brl(bal)})` : ' (pago)'}
+                          </span>
+                        );
+                      })()}
                     </p>
                   </div>
                   <PurgeButton

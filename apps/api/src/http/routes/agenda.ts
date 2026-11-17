@@ -8,6 +8,7 @@ import { ORGANIC_KEYS } from '../../domain/origin.js';
 import type { Lead } from '../../domain/types.js';
 import { appointmentToken } from '../../modules/agenda/appointmentLink.js';
 import type { Guard } from '../server.js';
+import { appointmentSaleSchema, assertCanAttachSale } from './appointmentSale.js';
 
 const actorOf = (req: { user?: { sub: string }; ip: string }) => ({ id: req.user!.sub, ip: req.ip });
 const duration = z.number().int().min(15).max(600);
@@ -109,7 +110,9 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
     const procName = new Map(procedures.map((p) => [p.id, p.name]));
     const out = [];
     const leadCache = new Map<string, Lead | null>();
+    const saleCache = new Map<string, Awaited<ReturnType<typeof c.appointmentSales.summary>>>();
     for (const a of appts) {
+      if (a.saleId && !saleCache.has(a.saleId)) saleCache.set(a.saleId, await c.appointmentSales.summary(a.saleId, procName));
       if (!leadCache.has(a.leadId)) leadCache.set(a.leadId, await c.repos.leads.findById(a.leadId));
       const lead = leadCache.get(a.leadId);
       const contact = lead ? await c.repos.contacts.findById(lead.contactId) : null;
@@ -131,6 +134,7 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
         confirmationError: a.confirmationError ?? null,
         patientResponseAt: a.patientResponseAt ?? null,
         patientNote: a.patientNote ?? null,
+        sale: a.saleId ? (saleCache.get(a.saleId) ?? null) : null,
       });
     }
     return out.sort((x, y) => x.scheduledFor.getTime() - y.scheduledFor.getTime());
@@ -145,9 +149,18 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
       (ct) => (ct.name ?? ct.profileName ?? '').toLowerCase().includes(term) || (digits.length >= 4 && (ct.waId ?? '').includes(digits)),
     );
     const out = [];
+    const procName = new Map((await c.repos.procedures.list()).map((p) => [p.id, p.name]));
     for (const ct of contacts.slice(0, 12)) {
       const lead = (await c.repos.leads.findOpenByContact(ct.id)) ?? (await c.repos.leads.findLatestByContact(ct.id));
-      out.push({ contactId: ct.id, name: ct.name ?? ct.profileName ?? null, waId: ct.waId, leadId: lead?.id ?? null, procedureInterestId: lead?.procedureInterestId ?? null });
+      out.push({
+        contactId: ct.id,
+        name: ct.name ?? ct.profileName ?? null,
+        waId: ct.waId,
+        leadId: lead?.id ?? null,
+        procedureInterestId: lead?.procedureInterestId ?? null,
+        // Vendas já lançadas (ex.: orçamento aprovado) para vincular ao horário em vez de lançar de novo.
+        openSales: lead ? await c.appointmentSales.openSales(lead.id, procName) : [],
+      });
     }
     return out;
   });
@@ -165,10 +178,15 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
         durationMin: duration.default(60),
         notes: z.string().max(500).nullish(),
         ignoreBlock: z.boolean().nullish(),
+        sale: appointmentSaleSchema.nullish(),
       })
       .parse(req.body);
     await assertOpen(b.scheduledFor, b.durationMin, b.ignoreBlock);
     const actor = actorOf(req);
+    if (b.sale) {
+      await assertCanAttachSale(c, actor.id, b.sale);
+      if (!('saleId' in b.sale) && !b.procedureId) throw new DomainError('VALIDATION', 'Escolha o procedimento para lançar o valor');
+    }
     let leadId = b.leadId ?? null;
     if (!leadId) {
       if (!b.waId || b.waId.length < 10) throw new DomainError('VALIDATION', 'Escolha a paciente ou informe o WhatsApp (DDI + DDD + número)');
@@ -197,7 +215,27 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
     for (const old of await c.repos.appointments.listByLead(leadId)) {
       if (old.patientResponse === 'RESCHEDULE' && !old.rescheduleHandled) await c.repos.appointments.update(old.id, { rescheduleHandled: true });
     }
-    return created;
+    if (b.sale) await c.appointmentSales.attach(created.id, b.sale, actor);
+    return (await c.repos.appointments.findById(created.id)) ?? created;
+  });
+
+  /** Valor do atendimento: vincula venda existente ou lança valor/pagamento a partir da Agenda. */
+  app.post('/appointments/:id/sale', { preHandler: guard('leads:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const b = appointmentSaleSchema.parse(req.body);
+    await assertCanAttachSale(c, req.user!.sub, b);
+    await c.appointmentSales.attach(id, b, actorOf(req));
+    const a = await c.repos.appointments.findById(id);
+    return { saleId: a?.saleId ?? null, sale: a?.saleId ? await c.appointmentSales.summary(a.saleId) : null };
+  });
+  app.get('/leads/:id/open-sales', { preHandler: guard('leads:read') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    return c.appointmentSales.openSales(id);
+  });
+  app.delete('/appointments/:id/sale', { preHandler: guard('leads:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    await c.appointmentSales.detach(id, actorOf(req));
+    return { ok: true };
   });
 
   /** Link pessoal da paciente (para a mensagem de confirmação). */

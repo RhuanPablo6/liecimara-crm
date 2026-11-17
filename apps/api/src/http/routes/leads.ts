@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { appointmentSaleSchema, assertCanAttachSale } from './appointmentSale.js';
 import type { Container } from '../../container.js';
 import { CONFIDENCE_LABELS_PT, LOST_REASON_LABELS_PT, STAGE_LABELS_PT, type Lead } from '../../domain/types.js';
 import { ORGANIC_KEYS, ORIGIN_LABELS, originOf } from '../../domain/origin.js';
@@ -249,8 +250,11 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
 
   app.post('/leads/:id/appointments', { preHandler: guard('leads:write') }, async (req) => {
     const { id: leadId } = id.parse(req.params);
-    const b = z.object({ scheduledFor: isoDate, procedureId: z.string().nullish() }).parse(req.body);
-    return c.funnel.scheduleAppointment(leadId, b, actorOf(req));
+    const b = z.object({ scheduledFor: isoDate, procedureId: z.string().nullish(), durationMin: z.number().int().min(15).max(600).nullish(), sale: appointmentSaleSchema.nullish() }).parse(req.body);
+    if (b.sale) await assertCanAttachSale(c, req.user!.sub, b.sale);
+    const appt = await c.funnel.scheduleAppointment(leadId, { scheduledFor: b.scheduledFor, procedureId: b.procedureId, durationMin: b.durationMin }, actorOf(req));
+    if (b.sale) await c.appointmentSales.attach(appt.id, b.sale, actorOf(req));
+    return (await c.repos.appointments.findById(appt.id)) ?? appt;
   });
 
   app.post('/appointments/:id/cancel', { preHandler: guard('leads:write') }, async (req) => {

@@ -8,6 +8,7 @@ import { useMe } from '@/components/access';
 import { QuoteEditor } from '@/components/quotes/quote-editor';
 import { QuoteStatusBadge, quoteNumber } from '@/components/quotes/quote-document';
 import { Button } from '@/components/ui/button';
+import { EditNameButton } from '@/components/edit-name';
 import { ClinicalRecord } from '@/components/clinical/clinical-record';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageButton } from '@/components/message-button';
@@ -113,7 +114,10 @@ export default function PatientPage({ params }: { params: Promise<{ id: string }
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-navy-800">{contact.name ?? 'Sem nome'}</h1>
+          <h1 className="flex items-center gap-1 text-3xl font-semibold text-navy-800">
+            {contact.name ?? contact.profileName ?? 'Sem nome'}
+            <EditNameButton contactId={contact.id} name={contact.name ?? contact.profileName ?? null} onSaved={() => void reload()} />
+          </h1>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span>{phone(contact.waId)}</span>
             {contact.waId && (

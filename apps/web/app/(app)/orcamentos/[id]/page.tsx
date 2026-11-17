@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowLeft, Check, Copy, MessageCircle, Pencil, Printer, RotateCcw, ShoppingBag, X } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Check, Copy, MessageCircle, Pencil, Printer, RotateCcw, ShoppingBag, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
@@ -128,9 +128,18 @@ export default function QuotePage({ params }: { params: Promise<{ id: string }> 
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">
             Aprovado em {dateTime(q.decidedAt)} · {q.saleIds.length} venda(s) lançada(s) no atendimento.{' '}
             {q.leadId && (
-              <Link href={`/leads/${q.leadId}`} className="font-medium underline">
-                Abrir atendimento para registrar pagamento ou agendar
-              </Link>
+              <>
+                <Link
+                  href={`/agenda?lead=${q.leadId}&name=${encodeURIComponent(q.patient?.name ?? '')}&proc=${q.items[0]?.procedureId ?? ''}`}
+                  className="ml-1 inline-flex items-center gap-1 font-medium underline"
+                >
+                  <CalendarPlus className="size-3.5" /> Agendar sessão (usa a venda deste orçamento)
+                </Link>
+                {' · '}
+                <Link href={`/leads/${q.leadId}`} className="font-medium underline">
+                  Abrir atendimento
+                </Link>
+              </>
             )}
           </p>
         )}

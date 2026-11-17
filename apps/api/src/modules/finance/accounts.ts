@@ -242,7 +242,7 @@ export class AccountsService {
     // Saldo em aberto com horário marcado: a paciente costuma pagar no dia do procedimento.
     // Se houver agendamento em aberto depois do vencimento informado, o vencimento passa a ser o dia dele
     // (de preferência o do mesmo procedimento). Remarcou? O vencimento acompanha.
-    const openApptsByLead = new Map<string, { day: string; procedureId: string | null }[]>();
+    const openApptsByLead = new Map<string, { day: string; procedureId: string | null; saleId: string | null }[]>();
     for (const sale of sales as Sale[]) {
       if (sale.status !== 'ACTIVE' || openApptsByLead.has(sale.leadId)) continue;
       if (sale.amountCents - (paidBySale.get(sale.id) ?? 0) <= 0) continue;
@@ -251,7 +251,7 @@ export class AccountsService {
         sale.leadId,
         appts
           .filter((a) => a.status === 'SCHEDULED' || a.status === 'CONFIRMED')
-          .map((a) => ({ day: spDay(a.scheduledFor), procedureId: a.procedureId }))
+          .map((a) => ({ day: spDay(a.scheduledFor), procedureId: a.procedureId, saleId: a.saleId ?? null }))
           .sort((a, b) => a.day.localeCompare(b.day)),
       );
     }
@@ -260,8 +260,10 @@ export class AccountsService {
       const open = sale.amountCents - (paidBySale.get(sale.id) ?? 0);
       if (open <= 0) continue;
       const baseDay = spDay(sale.dueAt ?? sale.soldAt);
-      const appts = (openApptsByLead.get(sale.leadId) ?? []).filter((a) => a.day >= baseDay || a.day >= today);
-      const appt = appts.find((a) => a.procedureId === sale.procedureId) ?? appts[0] ?? null;
+      const all = openApptsByLead.get(sale.leadId) ?? [];
+      const appts = all.filter((a) => a.day >= baseDay || a.day >= today);
+      // Horário vinculado à venda manda; senão, o do mesmo procedimento; senão, o próximo.
+      const appt = all.find((a) => a.saleId === sale.id && a.day >= today) ?? appts.find((a) => a.procedureId === sale.procedureId) ?? appts[0] ?? null;
       const dueFromAppointment = !!appt && appt.day > baseDay;
       const dueDay = dueFromAppointment ? appt!.day : baseDay;
       receivables.push({
