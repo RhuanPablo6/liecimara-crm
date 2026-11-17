@@ -33,9 +33,13 @@ export default function ClinicalDocumentPage({ params }: { params: Promise<{ id:
       </div>
 
       <article className="overflow-hidden rounded-2xl border bg-white shadow-sm print:rounded-none print:border-0 print:shadow-none">
-        <header className="bg-navy-800 px-8 py-5 print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
-          <p className="font-serif text-2xl text-gold-300">{f.clinicName}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-navy-100">{f.title}</p>
+        <header className="flex items-center gap-4 bg-navy-800 px-8 py-5 print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/mark-gold.png" alt="" className="h-12 w-auto" />
+          <div>
+            <p className="font-serif text-2xl text-gold-300">{f.clinicName}</p>
+            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-navy-100">{f.title}</p>
+          </div>
         </header>
         <div className="space-y-6 px-8 py-7">
           <div className="grid gap-3 text-sm sm:grid-cols-2">

@@ -66,6 +66,8 @@ export default function PatientAppointmentPage({ params }: { params: Promise<{ t
     <main className="flex min-h-screen items-start justify-center bg-[#f7f4ee] px-4 py-10">
       <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-lg">
         <div className="bg-navy-800 px-6 py-5 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/mark-gold.png" alt="" className="mx-auto mb-2 h-12 w-auto" />
           <p className="font-serif text-2xl text-gold-300">{data?.clinicName ?? 'Clínica'}</p>
           <p className="mt-1 text-xs uppercase tracking-[0.2em] text-navy-100">Seu agendamento</p>
         </div>

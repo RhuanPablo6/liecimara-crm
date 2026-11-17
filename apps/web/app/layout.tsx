@@ -7,9 +7,11 @@ import '@fontsource/cormorant-garamond/700.css';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Liecimara Ads CRM',
-  description: 'Rastreamento de leads de anúncios e conversões comerciais',
+  title: 'Liecimara CRM',
+  description: 'CRM da Clínica Dra. Liecimara Esteves',
   robots: { index: false, follow: false },
+  applicationName: 'Liecimara CRM',
+  appleWebApp: { capable: true, title: 'Liecimara', statusBarStyle: 'black-translucent' },
 };
 
 export const viewport: Viewport = { themeColor: '#0D1F3A', width: 'device-width', initialScale: 1 };

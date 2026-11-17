@@ -14,6 +14,11 @@ export function middleware(req: NextRequest) {
     pathname.startsWith('/f/') ||
     pathname.startsWith('/api/public/') ||
     pathname.startsWith('/_next') ||
+    // Logo e ícones do app (tela de login, link da paciente, "adicionar à tela inicial").
+    pathname.startsWith('/brand/') ||
+    pathname.startsWith('/icon') ||
+    pathname.startsWith('/apple-icon') ||
+    pathname === '/manifest.webmanifest' ||
     pathname === '/favicon.ico';
   if (isPublic) return NextResponse.next();
   if (!req.cookies.get(SESSION_COOKIE)?.value) {

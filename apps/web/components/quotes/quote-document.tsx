@@ -39,9 +39,13 @@ export function QuoteDocument({ q, className }: { q: QuoteDoc; className?: strin
   return (
     <article className={cn('quote-doc overflow-hidden rounded-2xl border bg-white text-navy-900 shadow-sm print:rounded-none print:border-0 print:shadow-none', className)}>
       <header className="flex flex-wrap items-end justify-between gap-4 bg-navy-800 px-6 py-6 sm:px-10 print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
-        <div>
-          <p className="font-serif text-2xl text-gold-300 sm:text-3xl">{q.clinicName}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.25em] text-navy-100">Orçamento de tratamento</p>
+        <div className="flex items-center gap-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/mark-gold.png" alt="" className="h-14 w-auto sm:h-16" />
+          <div>
+            <p className="font-serif text-2xl text-gold-300 sm:text-3xl">{q.clinicName}</p>
+            <p className="mt-1 text-xs uppercase tracking-[0.25em] text-navy-100">Orçamento de tratamento</p>
+          </div>
         </div>
         <div className="text-navy-100 sm:text-right">
           <p className="text-xs uppercase tracking-wider">Nº</p>

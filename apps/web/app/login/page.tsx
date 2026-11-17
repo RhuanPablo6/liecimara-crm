@@ -32,8 +32,8 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-navy-800 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <p className="font-serif text-4xl text-gold-300">Liecimara</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.3em] text-navy-200">Ads CRM</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo-gold.png" alt="Dra. Liecimara Esteves · Biomédica Esteta" className="mx-auto w-64" />
         </div>
         <form onSubmit={submit} className="space-y-4 rounded-xl bg-white p-6 shadow-xl">
           <Field label="E-mail">

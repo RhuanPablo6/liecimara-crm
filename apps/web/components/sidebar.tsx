@@ -67,7 +67,11 @@ export function Sidebar() {
     <>
       {/* Barra superior no celular */}
       <header className="sticky top-0 z-40 flex h-14 print:hidden items-center justify-between bg-navy-800 px-4 md:hidden">
-        <span className="font-serif text-lg text-gold-300">Liecimara</span>
+        <span className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/mark-gold.png" alt="" className="h-8 w-auto" />
+          <span className="font-serif text-lg text-gold-300">Liecimara</span>
+        </span>
         <button aria-label="Menu" onClick={() => setOpen((v) => !v)} className="text-white">
           <Menu className="h-5 w-5" />
         </button>
@@ -80,9 +84,9 @@ export function Sidebar() {
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="mb-8 px-6">
-          <p className="font-serif text-2xl text-gold-300">Liecimara</p>
-          <p className="text-xs uppercase tracking-[0.2em] text-navy-200">Ads CRM</p>
+        <div className="mb-4 px-6">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo-gold.png" alt="Dra. Liecimara Esteves · Biomédica Esteta" className="mx-auto w-full max-w-[136px]" />
         </div>
         {nav}
         <div className="border-t border-white/10 px-6 pt-4">

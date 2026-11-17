@@ -82,6 +82,8 @@ export default function SignFormPage({ params }: { params: Promise<{ token: stri
     <main className="min-h-screen bg-[#f7f4ee] px-3 py-6 sm:px-6 print:bg-white print:p-0">
       <div className="mx-auto max-w-2xl overflow-hidden rounded-2xl bg-white shadow-lg print:rounded-none print:shadow-none">
         <div className="bg-navy-800 px-6 py-5 text-center print:[-webkit-print-color-adjust:exact] print:[print-color-adjust:exact]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/mark-gold.png" alt="" className="mx-auto mb-2 h-12 w-auto" />
           <p className="font-serif text-2xl text-gold-300">{d?.clinic?.name ?? 'Clínica'}</p>
           <p className="mt-1 text-xs uppercase tracking-[0.2em] text-navy-100">{d?.title ?? 'Documento'}</p>
         </div>
