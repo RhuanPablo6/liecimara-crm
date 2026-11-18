@@ -238,6 +238,47 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
     return { ok: true };
   });
 
+  /** Painel "Confirmações": horários do dia com link pronto, quem já recebeu e quem respondeu. */
+  app.get('/agenda/confirmations', { preHandler: guard('leads:read') }, async (req) => {
+    const { day } = z.object({ day: dayStr }).parse(req.query);
+    const from = spInstant(day);
+    const appts = await c.repos.appointments.listScheduledBetween({ from, to: nextDay(day) });
+    const procName = new Map((await c.repos.procedures.list()).map((p) => [p.id, p.name]));
+    const rows = [];
+    for (const a of appts) {
+      if (a.status === 'CANCELED' && !a.patientResponse) continue;
+      const lead = await c.repos.leads.findById(a.leadId);
+      const contact = lead ? await c.repos.contacts.findById(lead.contactId) : null;
+      rows.push({
+        id: a.id,
+        leadId: a.leadId,
+        contactId: contact?.id ?? null,
+        name: contact?.name ?? contact?.profileName ?? null,
+        waId: contact?.waId ?? null,
+        scheduledFor: a.scheduledFor,
+        procedureName: a.procedureId ? (procName.get(a.procedureId) ?? null) : null,
+        status: a.status,
+        patientResponse: a.patientResponse ?? null,
+        patientResponseAt: a.patientResponseAt ?? null,
+        patientNote: a.patientNote ?? null,
+        linkSentAt: a.confirmationLinkSentAt ?? null,
+        whatsappSentAt: a.confirmationSentAt ?? null,
+        token: appointmentToken(a.id, c.env.JWT_SECRET),
+      });
+    }
+    return rows.sort((x, y) => x.scheduledFor.getTime() - y.scheduledFor.getTime());
+  });
+
+  app.post('/appointments/:id/confirmation-link-sent', { preHandler: guard('leads:write') }, async (req) => {
+    const { id } = z.object({ id: z.string().min(1) }).parse(req.params);
+    const a = await c.repos.appointments.findById(id);
+    if (!a) throw new DomainError('NOT_FOUND', 'Agendamento não encontrado', 404);
+    const at = new Date();
+    await c.repos.appointments.update(id, { confirmationLinkSentAt: at });
+    await c.audit.record({ userId: req.user!.sub, action: 'appointment.confirmation_link', entityType: 'Appointment', entityId: id, ip: req.ip });
+    return { linkSentAt: at };
+  });
+
   /** Link pessoal da paciente (para a mensagem de confirmação). */
   app.get('/appointments/:id/link', { preHandler: guard('leads:read') }, async (req) => {
     const { id } = z.object({ id: z.string().min(1) }).parse(req.params);

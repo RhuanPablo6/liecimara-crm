@@ -1,6 +1,7 @@
 'use client';
 
-import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, Lock, LockOpen, Plus, Undo2, UserCheck, UserX } from 'lucide-react';
+import { CalendarCheck, CalendarX, Check, ChevronLeft, ChevronRight, Lock, LockOpen, Plus, Send, Undo2, UserCheck, UserX } from 'lucide-react';
+import { ConfirmationsPanel } from '@/components/confirmations-panel';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MessageButton } from '@/components/message-button';
@@ -1003,6 +1004,7 @@ export default function AgendaPage() {
   const [creating, setCreating] = useState<{ day: string; time: string; leadId?: string; name?: string; procedureId?: string } | null>(null);
   const [selected, setSelected] = useState<Appt | null>(null);
   const [closing, setClosing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [selBlock, setSelBlock] = useState<Block | null>(null);
   const [now, setNow] = useState(Date.now());
   const scroller = useRef<HTMLDivElement>(null);
@@ -1085,6 +1087,9 @@ export default function AgendaPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setConfirming(true)}>
+            <Send /> Confirmações de amanhã
+          </Button>
           <Button variant="outline" onClick={() => setClosing(true)}>
             <Lock /> Fechar agenda
           </Button>
@@ -1362,6 +1367,9 @@ export default function AgendaPage() {
       </Dialog>
       <Dialog open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
         {selected && <AppointmentDetails key={selected.id} a={selected} appts={data ?? []} blocks={blocks} procedures={procedures ?? []} onDone={close} />}
+      </Dialog>
+      <Dialog open={confirming} onOpenChange={setConfirming}>
+        {confirming && <ConfirmationsPanel onChanged={() => (void reload(), void reloadResponses())} />}
       </Dialog>
       <Dialog open={closing} onOpenChange={(v) => !v && close(true)}>
         {closing && <CloseAgendaDialog initDay={anchor < today ? today : anchor} onDone={close} />}

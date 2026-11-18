@@ -321,6 +321,8 @@ export interface Appointment {
   confirmationSentAt?: Date | null;
   confirmationMessageId?: string | null;
   confirmationError?: string | null;
+  /** Link de confirmação enviado manualmente (WhatsApp da recepção). */
+  confirmationLinkSentAt?: Date | null;
   status: AppointmentStatus;
   cancelReason: string | null;
   createdById: string | null;
