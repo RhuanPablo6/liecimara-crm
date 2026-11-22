@@ -52,7 +52,7 @@ export function Sidebar() {
             href={href}
             onClick={() => setOpen(false)}
             className={cn(
-              'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'flex items-center gap-3 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               active ? 'bg-gold-400/15 text-gold-300' : 'text-navy-100 hover:bg-white/5 hover:text-white',
             )}
           >
@@ -81,13 +81,13 @@ export function Sidebar() {
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-navy-800 py-6 transition-transform md:sticky md:top-0 md:h-screen md:translate-x-0 print:hidden',
+          'fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-navy-800 py-5 transition-transform md:sticky md:top-0 md:h-screen md:translate-x-0 print:hidden',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="mb-4 px-6">
+        <div className="mb-3 px-6">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/logo-gold.png" alt="Dra. Liecimara Esteves · Biomédica Esteta" className="mx-auto w-full max-w-[136px]" />
+          <img src="/brand/logo-gold.png" alt="Dra. Liecimara Esteves · Biomédica Esteta" className="mx-auto w-full max-w-[112px]" />
         </div>
         {nav}
         <div className="border-t border-white/10 px-6 pt-4">

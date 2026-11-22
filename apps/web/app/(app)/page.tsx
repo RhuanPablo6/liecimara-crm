@@ -12,13 +12,11 @@ import { brl, dateTime, num, pct, presetRange, roas } from '@/lib/format';
 
 function Kpi({ label, value, hint, accent }: { label: string; value: string; hint?: string; accent?: boolean }) {
   return (
-    <Card className={accent ? 'border-gold-300 bg-gradient-to-br from-white to-gold-50' : ''}>
-      <CardContent className="p-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground" title={hint}>
-          {label}
-        </p>
-        <p className="mt-1 text-2xl font-semibold text-navy-800">{value}</p>
-        {hint && <p className="mt-1 line-clamp-2 text-[11px] leading-tight text-muted-foreground">{hint}</p>}
+    <Card className={accent ? 'border-gold-300 bg-gradient-to-br from-white to-gold-50' : ''} title={hint}>
+      <CardContent className="flex h-full flex-col p-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="mt-1 truncate text-2xl font-semibold tabular-nums text-navy-800">{value}</p>
+        {hint && <p className="mt-1 line-clamp-3 text-xs leading-snug text-muted-foreground">{hint}</p>}
       </CardContent>
     </Card>
   );
@@ -48,7 +46,7 @@ export default function DashboardPage() {
 
       {s && (
         <>
-          <section className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+          <section className="grid grid-cols-2 gap-3 md:grid-cols-4 min-[1800px]:grid-cols-8">
             <Kpi label="Mensagens" value={num(s.messages.total)} hint={def('messages')} />
             <Kpi label="Conversas" value={num(s.conversations)} hint={def('conversations')} />
             <Kpi label="Leads únicos" value={num(s.leads.uniqueContacts)} hint={def('uniqueLeads')} />
@@ -59,7 +57,7 @@ export default function DashboardPage() {
             <Kpi label="Receita atribuída" value={brl(s.sales.attributedRevenueCents)} hint={`de ${brl(s.sales.revenueCents)} no total`} accent />
           </section>
 
-          <section className="grid gap-3 md:grid-cols-4">
+          <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Kpi label="Investimento (Meta)" value={brl(s.investment.spendCents)} />
             <Kpi label="Custo por lead atribuído" value={brl(s.investment.costPerAttributedLeadCents)} hint="Somente leads com evidência" />
             <Kpi label="ROAS" value={roas(s.investment.roas)} hint={`Só referência oficial: ${roas(s.investment.roasOfficialOnly)}`} accent />
