@@ -85,6 +85,7 @@ describe('YCloud', () => {
       if (url.endsWith('/webhookEndpoints?limit=100')) return { status: 200, json: { items: [] } };
       if (url.endsWith('/webhookEndpoints')) return { status: 200, json: { id: 'wh1', secret: SECRET } };
       if (url.endsWith('/sendDirectly')) return { status: 200, json: { id: 'm1', wamid: `wamid.out${w.http.calls.length}`, status: 'accepted' } };
+      if (url.includes('/whatsapp/templates?')) return { status: 200, json: { items: [{ name: 'confirmacaoagendamento1', language: 'pt_BR', status: 'APPROVED' }] } };
       return { status: 404, json: {} };
     };
     await w.integrations.configureYCloud({ apiKey: 'key-123456' }, { id: 'adm', role: 'ADMIN' });

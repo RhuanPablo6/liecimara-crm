@@ -27,7 +27,14 @@ export interface ConfirmationSettings {
   /** Texto exato do modelo enviado à Meta (com o nome da clínica). */
   templateBody?: string | null;
   lastRunDay?: string | null;
+  /** Envio automático pausado por problema da conta (permissão/pagamento): evita tentar de novo a cada 10 min. */
+  pausedReason?: string | null;
+  pausedAt?: string | null;
 }
+
+/** Erros da conta inteira (não da paciente): pagamento, permissão, token, conta bloqueada. */
+const ACCOUNT_ERROR_CODES = new Set([10, 200, 190, 131031, 131042, 368]);
+const isAccountError = (text: string) => /c[óo]digo (10|200|190|131031|131042|368)\b|permission|permiss[ãa]o|pagamento|payment/i.test(text);
 
 export const DEFAULT_CONFIRMATION_SETTINGS: ConfirmationSettings = {
   enabled: false,
@@ -75,8 +82,14 @@ export class ConfirmationService {
     return { ...DEFAULT_CONFIRMATION_SETTINGS, ...((await this.repos.settings.get<Partial<ConfirmationSettings>>(CONFIRMATION_SETTINGS_KEY)) ?? {}) };
   }
 
-  async saveSettings(patch: Partial<Pick<ConfirmationSettings, 'enabled' | 'sendHour'>>) {
-    const next = { ...(await this.settings()), ...patch };
+  async saveSettings(patch: Partial<Pick<ConfirmationSettings, 'enabled' | 'sendHour'>> & { resume?: boolean }) {
+    const { resume, ...rest } = patch;
+    const next: ConfirmationSettings = { ...(await this.settings()), ...rest };
+    // Religar ou "Tentar de novo" tira a pausa.
+    if (resume || rest.enabled === true) {
+      next.pausedReason = null;
+      next.pausedAt = null;
+    }
     await this.repos.settings.set(CONFIRMATION_SETTINGS_KEY, next);
     return next;
   }
@@ -136,6 +149,12 @@ export class ConfirmationService {
   }
 
   /** Envia a confirmação de um agendamento. `force` reenvia mesmo se já foi enviada. */
+  private async pause(reason: string) {
+    const s = await this.settings();
+    if (s.pausedReason) return;
+    await this.repos.settings.set(CONFIRMATION_SETTINGS_KEY, { ...s, pausedReason: reason.slice(0, 300), pausedAt: this.clock.now().toISOString() });
+  }
+
   /** Consulta no YCloud a situação da última confirmação do horário (para quando "não chegou"). */
   async checkDelivery(appointmentId: string) {
     const appt = await this.repos.appointments.findById(appointmentId);
@@ -170,6 +189,7 @@ export class ConfirmationService {
     if (!appt) return null;
     if (evt.status === 'failed') {
       const e = evt.errors[0];
+      if (e && ACCOUNT_ERROR_CODES.has(e.code)) await this.pause(explainDeliveryError(e.code, e.title));
       const reason = explainDeliveryError(e?.code ?? null, e?.title ?? null);
       await this.repos.appointments.update(appt.id, { confirmationSentAt: null, confirmationError: reason.slice(0, 300), confirmationMessageId: evt.waMessageId });
       return `confirmação não entregue: ${reason}`;
@@ -230,22 +250,33 @@ export class ConfirmationService {
   async runDue(): Promise<{ sent: number; failed: number; skipped: string | null }> {
     const s = await this.settings();
     if (!s.enabled) return { sent: 0, failed: 0, skipped: 'desligado' };
-    if (!(await this.integrations.getYCloud())) return { sent: 0, failed: 0, skipped: 'WhatsApp não conectado' };
+    if (s.pausedReason) return { sent: 0, failed: 0, skipped: `pausado: ${s.pausedReason}` };
+    const p = await this.integrations.getYCloud();
+    if (!p) return { sent: 0, failed: 0, skipped: 'WhatsApp não conectado' };
     const now = this.clock.now();
     const hour = new Date(now.getTime() - SP_OFFSET_MS).getUTCHours();
     if (hour < s.sendHour || hour >= 20) return { sent: 0, failed: 0, skipped: 'fora do horário' };
+    // Sem modelo aprovado (ex.: conta do WhatsApp nova), não tenta enviar.
+    const tpl = await p.findTemplate(s.templateName, s.language).catch(() => null);
+    if (String(tpl?.status ?? '') !== 'APPROVED') return { sent: 0, failed: 0, skipped: 'modelo não aprovado' };
     const tomorrow = addDays(spDay(now), 1);
     const from = new Date(dayToDate(tomorrow).getTime() - 12 * 3_600_000); // 00:00 SP
     const to = new Date(from.getTime() + 86_400_000);
     let sent = 0;
     let failed = 0;
     for (const a of await this.repos.appointments.listScheduledBetween({ from, to })) {
-      if (a.status !== 'SCHEDULED' || a.confirmationSentAt || a.patientResponse) continue;
+      // Já recebeu (pelo automático ou pela recepção, com link), já respondeu ou falhou antes (reenviar é manual).
+      if (a.status !== 'SCHEDULED' || a.confirmationSentAt || a.confirmationLinkSentAt || a.patientResponse || a.confirmationError) continue;
       try {
         await this.send(a.id);
         sent++;
-      } catch {
+      } catch (e) {
         failed++;
+        const msg = (e as Error).message;
+        if (isAccountError(msg)) {
+          await this.pause(msg);
+          break;
+        }
       }
     }
     return { sent, failed, skipped: null };

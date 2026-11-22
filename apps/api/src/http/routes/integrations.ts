@@ -69,7 +69,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, c: Container, gu
   app.get('/whatsapp/confirmations', { preHandler: guard('leads:read') }, async () => c.confirmations.status());
 
   app.put('/whatsapp/confirmations/settings', { preHandler: guard('integrations:write') }, async (req) => {
-    const b = z.object({ enabled: z.boolean().optional(), sendHour: z.number().int().min(7).max(19).optional() }).parse(req.body);
+    const b = z.object({ enabled: z.boolean().optional(), sendHour: z.number().int().min(7).max(19).optional(), resume: z.boolean().optional() }).parse(req.body);
     const next = await c.confirmations.saveSettings(b);
     await c.audit.record({ userId: req.user!.sub, action: 'whatsapp.confirmations.settings', entityType: 'Setting', entityId: null, after: b, ip: req.ip });
     return next;

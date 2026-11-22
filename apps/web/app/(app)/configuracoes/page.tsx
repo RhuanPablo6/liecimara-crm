@@ -82,6 +82,18 @@ function ConfirmationsCard() {
           </Button>
         )}
         {data.template && !approved && <p className="text-muted-foreground">A Meta costuma aprovar em minutos, às vezes em até 24 h. Atualize esta página para ver.</p>}
+        {data.settings.pausedReason && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-800">
+            <span>
+              <b>Envio automático pausado</b>
+              {data.settings.pausedAt && ` desde ${new Date(data.settings.pausedAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}: {data.settings.pausedReason}. Até
+              resolver, use “Confirmações de amanhã” na Agenda.
+            </span>
+            <Button size="sm" variant="outline" disabled={act.busy} onClick={() => save({ resume: true })}>
+              Tentar de novo
+            </Button>
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-4 border-t pt-4">
           <label className="flex items-center gap-2">
             <input
@@ -111,7 +123,8 @@ function ConfirmationsCard() {
         </div>
         {!approved && <p className="text-xs text-muted-foreground">O envio automático libera quando o modelo estiver aprovado.</p>}
         <p className="text-xs text-muted-foreground">
-          Também dá para enviar na hora, por agendamento, no botão “Enviar confirmação pelo WhatsApp” da Agenda. Cada confirmação custa cerca de R$ 0,04
+          O envio roda às 9h05 e, depois do horário escolhido, sempre que alguém usa o CRM (até as 20h). Pacientes que já receberam o link pela
+          recepção, já responderam ou tiveram falha não recebem de novo. Também dá para enviar na hora, por agendamento, no botão “Enviar confirmação pelo WhatsApp” da Agenda. Cada confirmação custa cerca de R$ 0,04
           (tarifa da Meta).
         </p>
         <ErrorText>{act.error}</ErrorText>
