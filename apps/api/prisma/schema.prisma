@@ -389,6 +389,8 @@ model Sale {
   attributionConfidence AttributionConfidence
   adMetaId              String?
   campaignMetaId        String?
+  /// Valor de tabela lançado no histórico importado (Heon): fica fora do Financeiro e dos relatórios
+  imported              Boolean               @default(false)
   createdById           String?
   createdAt             DateTime              @default(now())
 
@@ -414,6 +416,8 @@ model Payment {
   method       PaymentMethod
   installments Int           @default(1)
   paidAt       DateTime
+  /// Pagamento do histórico importado (Heon): fora do caixa e do Financeiro
+  imported     Boolean       @default(false)
   createdById  String?
   createdAt    DateTime      @default(now())
 

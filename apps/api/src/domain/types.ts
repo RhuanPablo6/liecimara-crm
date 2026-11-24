@@ -357,6 +357,8 @@ export interface Sale {
   attributionConfidence: AttributionConfidence;
   adMetaId: string | null;
   campaignMetaId: string | null;
+  /** Valor de tabela do histórico importado (Heon): fora do Financeiro e dos relatórios. */
+  imported?: boolean;
   createdById: string | null;
   createdAt: Date;
 }
@@ -368,6 +370,8 @@ export interface Payment {
   method: PaymentMethod;
   installments: number;
   paidAt: Date;
+  /** Pagamento do histórico importado (Heon). */
+  imported?: boolean;
   createdById: string | null;
 }
 

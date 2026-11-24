@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorText, Field, NativeSelect } from '@/components/ui/form';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import { api, useAction } from '@/lib/api';
+import { api, useAction, useApi } from '@/lib/api';
+import { brl } from '@/lib/format';
 
 interface Preview {
   patients: {
@@ -68,6 +69,82 @@ function Stat({ value, label, tone }: { value: number | string; label: string; t
   );
 }
 
+interface PricesPreview {
+  ready: number;
+  totalCents: number;
+  alreadyPriced: number;
+  missing: { procedureId: string; name: string; count: number }[];
+}
+
+/** Lança o preço de tabela de cada procedimento realizado (histórico do Heon), em lotes. */
+async function applyAllPrices(onProgress?: (done: number) => void) {
+  let created = 0;
+  let total = 0;
+  for (;;) {
+    const r: { created: number; totalCents: number; remaining: number } = await api('/imports/heon/prices', { method: 'POST', body: { limit: 60 } });
+    created += r.created;
+    total += r.totalCents;
+    onProgress?.(created);
+    if (!r.remaining || !r.created) break;
+  }
+  return { created, total };
+}
+
+function HistoryPrices({ refreshKey }: { refreshKey: number }) {
+  const { data, reload } = useApi<PricesPreview>(`/imports/heon/prices?k=${refreshKey}`);
+  const act = useAction();
+  const [done, setDone] = useState<{ created: number; total: number } | null>(null);
+  if (!data || (!data.ready && !data.alreadyPriced && !data.missing.length)) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Valores no histórico</CardTitle>
+        <CardDescription>
+          Lança o preço de tabela de cada procedimento realizado nos agendamentos importados, como compra já paga. Aparece no histórico, no total gasto
+          e no ranking de cada paciente. Não entra no Financeiro, no Painel nem nos relatórios, porque é estimativa (descontos e combos da época não
+          estão no Heon).
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <Stat value={data.ready} label="procedimentos prontos para lançar" />
+          <Stat value={brl(data.totalCents)} label="valor de tabela" />
+          <Stat value={data.alreadyPriced} label="já lançados" tone="muted" />
+        </div>
+        {data.missing.length > 0 && (
+          <p className="flex gap-2 rounded-md bg-amber-50 px-3 py-2 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span>
+              Sem preço cadastrado: {data.missing.map((m) => `${m.name} (${m.count})`).join(', ')}. Cadastre o preço em Financeiro › Procedimentos e
+              volte aqui para lançar estes também.
+            </span>
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            disabled={act.busy || !data.ready}
+            onClick={() =>
+              act.run(async () => {
+                setDone(await applyAllPrices());
+                await reload();
+              })
+            }
+          >
+            {act.busy ? <Loader2 className="animate-spin" /> : null}
+            Lançar valores no histórico
+          </Button>
+          {done && (
+            <span className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+              <CheckCircle2 className="size-4" /> {done.created} lançados ({brl(done.total)}).
+            </span>
+          )}
+        </div>
+        <ErrorText>{act.error}</ErrorText>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function HeonImport() {
   const [patientsFile, setPatientsFile] = useState<File | null>(null);
   const [agendaFile, setAgendaFile] = useState<File | null>(null);
@@ -75,8 +152,10 @@ export function HeonImport() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [mapping, setMapping] = useState<Record<string, string | null>>({});
   const [sensitive, setSensitive] = useState(true);
+  const [withPrices, setWithPrices] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [step, setStep] = useState<Step | null>(null);
-  const [result, setResult] = useState<{ created: number; updated: number; appts: number; performed: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ created: number; updated: number; appts: number; performed: number; skipped: number; priced: number; pricedCents: number } | null>(null);
   const act = useAction();
 
   const analyze = () =>
@@ -93,7 +172,7 @@ export function HeonImport() {
   const runImport = () =>
     act.run(async () => {
       if (!texts || !preview) return;
-      const total = { created: 0, updated: 0, appts: 0, performed: 0, skipped: 0 };
+      const total = { created: 0, updated: 0, appts: 0, performed: 0, skipped: 0, priced: 0, pricedCents: 0 };
       let offset: number | null = 0;
       while (offset !== null) {
         const r: { total: number; done: number; next: number | null; created: number; updated: number } = await api('/imports/heon/patients', {
@@ -119,8 +198,14 @@ export function HeonImport() {
           offset = r.next;
         }
       }
+      if (withPrices) {
+        const r = await applyAllPrices((n) => setStep({ label: 'Valores no histórico', done: n, total: Math.max(n, 1) }));
+        total.priced = r.created;
+        total.pricedCents = r.total;
+      }
       setResult(total);
       setStep(null);
+      setRefreshKey((k) => k + 1);
     });
 
   const p = preview?.patients;
@@ -209,6 +294,10 @@ export function HeonImport() {
                   Confira a qual procedimento do CRM cada nome do Heon corresponde. Os vinculados contam como procedimento realizado e geram o lembrete de
                   retorno (ex.: Botox). Consulta e retorno ficam sem vínculo.
                 </p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="size-4 accent-navy-700" checked={withPrices} onChange={(e) => setWithPrices(e.target.checked)} />
+                  Lançar o preço de tabela dos procedimentos realizados no histórico da paciente (não entra no Financeiro)
+                </label>
                 <Table>
                   <THead>
                     <TR>
@@ -265,13 +354,15 @@ export function HeonImport() {
                 <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300">
                   <CheckCircle2 className="size-4" />
                   Pronto: {result.created} pacientes novas, {result.updated} completadas, {result.appts} agendamentos no histórico ({result.performed}{' '}
-                  procedimentos realizados){result.skipped ? `, ${result.skipped} já estavam no CRM` : ''}.
+                  procedimentos realizados){result.priced ? `, ${brl(result.pricedCents)} em valores de tabela no histórico` : ''}
+                  {result.skipped ? `, ${result.skipped} já estavam no CRM` : ''}.
                 </p>
               )}
             </CardContent>
           </Card>
         </>
       )}
+      <HistoryPrices refreshKey={refreshKey} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { HeonImportService } from '../src/modules/imports/HeonImportService.js';
 import { parseHeonPatients, phoneToWaId, prettyName, suggestProcedure, validCpf } from '../src/modules/imports/heon.js';
 import { PatientsService } from '../src/modules/patients/PatientsService.js';
 import { RecallService } from '../src/modules/recalls/RecallService.js';
-import { buildWorld, seedProcedure } from './helpers.js';
+import { buildWorld, range, seedProcedure } from './helpers.js';
 
 const HEAD =
   'uid;field_nome;email;field_telefone_celular;field_telefone_fixo;field_cpf;field_rg;field_data_de_nascimento;field_nome_do_responsavel;field_telefone_do_responsavel;field_rg_do_responsavel;field_cpf_do_responsavel;field_cep;field_endereco;field_cidade;field_numero;field_bairro;field_estado';
@@ -118,6 +118,21 @@ describe('Importação do Heon', () => {
     const d = await patients.detail(maria!.id, now);
     assert.equal(d?.contact.birthDate, '1980-05-10');
     assert.equal(d?.summary?.attended, 2);
+
+    // Valor de tabela no histórico: compra paga, importada, sem saldo e fora do Financeiro.
+    const pp = await svc.pricesPreview();
+    assert.equal(pp.ready, 1);
+    assert.equal(pp.totalCents, 120000);
+    const ap = await svc.applyPrices({ limit: 50, userId: null }, now);
+    assert.equal(ap.created, 1);
+    assert.equal((await svc.applyPrices({ limit: 50, userId: null }, now)).created, 0, 'não lança duas vezes');
+    const d2 = await patients.detail(maria!.id, now);
+    assert.equal(d2?.summary?.spentCents, 120000);
+    assert.equal(d2?.summary?.balanceCents, 0);
+    const sales = await w.repos.sales.listSoldIn({ from: new Date('2026-01-01T00:00:00Z'), to: new Date('2027-01-01T00:00:00Z') });
+    assert.ok(sales.every((x) => x.imported));
+    const fin = await w.metrics.summary(range('2026-08-01T00:00:00Z', '2026-12-01T00:00:00Z'));
+    assert.ok(!JSON.stringify(fin).includes('120000'), 'fora do Painel');
 
     // Botox em 02/08 + 120 dias → retorno no começo de dezembro.
     const board = await new RecallService(w.repos).board(now, { horizonDays: 14 });

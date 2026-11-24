@@ -145,8 +145,8 @@ export class FinanceService {
     const [rules, procedures, sales, payments, appointments, purchases, expenses, insights, ads] = await Promise.all([
       this.repos.settings.get<FeeRule[]>(FEE_SETTINGS_KEY).then((r) => r ?? DEFAULT_FEE_RULES),
       this.repos.procedures.list(),
-      this.repos.sales.listSoldIn(range),
-      this.repos.payments.listPaidIn(range),
+      this.repos.sales.listSoldIn(range).then((xs) => xs.filter((x) => !x.imported)),
+      this.repos.payments.listPaidIn(range).then((xs) => xs.filter((x) => !x.imported)),
       this.repos.appointments.listScheduledBetween(range),
       this.repos.purchases.list(range),
       this.repos.expenses.list(range),

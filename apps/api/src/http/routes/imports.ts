@@ -45,4 +45,14 @@ export function registerImportRoutes(app: FastifyInstance, c: Container, guard: 
       await c.audit.record({ userId: req.user!.sub, action: 'import.heon.agenda', entityType: 'Appointment', entityId: null, before: null, after: { patients: r.total, mapping: b.mapping }, ip: req.ip });
     return r;
   });
+
+  /** Valores de tabela no histórico importado: prévia e lançamento (em lotes). */
+  app.get('/imports/heon/prices', { preHandler: guard('users:manage') }, async () => c.heonImport.pricesPreview());
+
+  app.post('/imports/heon/prices', { preHandler: guard('users:manage') }, async (req) => {
+    const b = z.object({ limit: z.number().int().min(1).max(200).default(60) }).parse(req.body ?? {});
+    const r = await c.heonImport.applyPrices({ limit: b.limit, userId: req.user!.sub });
+    if (r.created) await c.audit.record({ userId: req.user!.sub, action: 'import.heon.prices', entityType: 'Sale', entityId: null, before: null, after: r, ip: req.ip });
+    return r;
+  });
 }

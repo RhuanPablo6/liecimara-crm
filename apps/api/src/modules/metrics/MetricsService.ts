@@ -52,9 +52,9 @@ export class MetricsService {
       r.conversations.countStartedIn(range),
       r.leads.list({ openedIn: range, excludeImported: true, limit: ALL }),
       r.appointments.listCreatedIn(range).then((xs) => xs.filter((a) => !a.externalId)),
-      r.sales.listSoldIn(range),
+      r.sales.listSoldIn(range).then((xs) => xs.filter((x) => !x.imported)),
       r.performed.listPerformedIn(range),
-      r.payments.listPaidIn(range),
+      r.payments.listPaidIn(range).then((xs) => xs.filter((x) => !x.imported)),
       r.ads.listInsights(range),
     ]);
     const sales = salesAll.filter((s) => s.status === 'ACTIVE');
@@ -152,7 +152,7 @@ export class MetricsService {
       r.ads.listAdSets(),
       r.ads.listInsights(range),
       r.leads.list({ openedIn: range, excludeImported: true, limit: ALL }),
-      r.sales.listSoldIn(range),
+      r.sales.listSoldIn(range).then((xs) => xs.filter((x) => !x.imported)),
       r.conversations.countStartedByAdIn(range),
     ]);
     const sales = salesAll.filter((s) => s.status === 'ACTIVE');
@@ -269,7 +269,7 @@ export class MetricsService {
   async timeseries(range: DateRange) {
     const [leads, sales, insights] = await Promise.all([
       this.repos.leads.list({ openedIn: range, excludeImported: true, limit: ALL }),
-      this.repos.sales.listSoldIn(range),
+      this.repos.sales.listSoldIn(range).then((xs) => xs.filter((x) => !x.imported)),
       this.repos.ads.listInsights(range),
     ]);
     const days = new Map<string, { date: string; leadsOfficial: number; leadsManual: number; leadsUnknown: number; spendCents: number; revenueCents: number }>();

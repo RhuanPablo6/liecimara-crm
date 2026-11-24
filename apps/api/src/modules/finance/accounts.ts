@@ -171,8 +171,8 @@ export class AccountsService {
       this.feeRules(),
       this.repos.expenses.list(),
       this.repos.purchases.list(),
-      this.repos.payments.listPaidIn(wide),
-      this.repos.sales.listSoldIn(wide),
+      this.repos.payments.listPaidIn(wide).then((xs) => xs.filter((x) => !x.imported)),
+      this.repos.sales.listSoldIn(wide).then((xs) => xs.filter((x) => !x.imported)),
       this.repos.procedures.list(),
     ]);
     const procName = new Map(procedures.map((p) => [p.id, p.name]));

@@ -137,7 +137,7 @@ export function registerFinanceRoutes(app: FastifyInstance, c: Container, guard:
   app.get('/finance/sales', { preHandler: guard('finance:read') }, async (req) => {
     const q = z.object({ from: day, to: day }).parse(req.query);
     const [sales, procedures, ads] = await Promise.all([
-      c.repos.sales.listSoldIn(dayRange(q.from, q.to)),
+      c.repos.sales.listSoldIn(dayRange(q.from, q.to)).then((xs) => xs.filter((x) => !x.imported)),
       c.repos.procedures.list(),
       c.repos.ads.listAds(),
     ]);

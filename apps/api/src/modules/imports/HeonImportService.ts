@@ -27,6 +27,7 @@ export interface HeonFiles {
 }
 
 const extId = (uid: string) => `heon:${uid}`;
+const WIDE = { from: new Date('2000-01-01T00:00:00Z'), to: new Date('2999-12-31T00:00:00Z') };
 
 export class HeonImportService {
   constructor(private readonly repos: Repos) {}
@@ -160,6 +161,75 @@ export class HeonImportService {
     }
     const next = opts.offset + slice.length;
     return { total: entries.length, done: next, next: next < entries.length ? next : null, created, skipped, performed };
+  }
+
+  // ── valores de tabela no histórico ────────────────────────
+
+  /** Agendamentos importados em que a paciente compareceu, com procedimento e ainda sem valor. */
+  private async unpriced() {
+    const [appts, procedures] = await Promise.all([this.repos.appointments.listScheduledBetween(WIDE), this.repos.procedures.list()]);
+    const imported = appts.filter((a) => a.externalId?.startsWith('heon:') && a.status === 'ATTENDED' && a.procedureId);
+    const proc = new Map(procedures.map((p) => [p.id, p]));
+    return { pending: imported.filter((a) => !a.saleId), priced: imported.filter((a) => a.saleId).length, proc };
+  }
+
+  /** Quanto entraria no histórico com o preço de tabela atual e quais procedimentos estão sem preço. */
+  async pricesPreview() {
+    const { pending, priced, proc } = await this.unpriced();
+    const missing = new Map<string, number>();
+    let ready = 0;
+    let totalCents = 0;
+    for (const a of pending) {
+      const price = proc.get(a.procedureId!)?.defaultPriceCents ?? 0;
+      if (price > 0) {
+        ready++;
+        totalCents += price;
+      } else missing.set(a.procedureId!, (missing.get(a.procedureId!) ?? 0) + 1);
+    }
+    return {
+      ready,
+      totalCents,
+      alreadyPriced: priced,
+      missing: [...missing].map(([procedureId, count]) => ({ procedureId, name: proc.get(procedureId)?.name ?? 'Procedimento', count })),
+    };
+  }
+
+  /**
+   * Lança o valor de tabela de cada procedimento do histórico como compra já paga, marcada como importada:
+   * entra no histórico e no ranking da paciente, mas não no Financeiro, no Painel nem nos relatórios.
+   */
+  async applyPrices(opts: { limit: number; userId: string | null }, now = new Date()) {
+    const { pending, proc } = await this.unpriced();
+    let created = 0;
+    let totalCents = 0;
+    let remaining = 0;
+    for (const a of pending) {
+      const price = proc.get(a.procedureId!)?.defaultPriceCents ?? 0;
+      if (price <= 0) continue;
+      if (created >= opts.limit) {
+        remaining++;
+        continue;
+      }
+      const sale = await this.repos.sales.create({
+        leadId: a.leadId,
+        procedureId: a.procedureId!,
+        amountCents: price,
+        soldAt: a.scheduledFor,
+        status: 'ACTIVE',
+        dueAt: null,
+        attributionConfidence: 'UNKNOWN',
+        adMetaId: null,
+        campaignMetaId: null,
+        imported: true,
+        createdById: opts.userId,
+        createdAt: now,
+      });
+      await this.repos.payments.create({ saleId: sale.id, amountCents: price, method: 'OTHER', installments: 1, paidAt: a.scheduledFor, imported: true, createdById: opts.userId });
+      await this.repos.appointments.update(a.id, { saleId: sale.id });
+      created++;
+      totalCents += price;
+    }
+    return { created, totalCents, remaining };
   }
 
   // ── internos ───────────────────────────────────────────────
