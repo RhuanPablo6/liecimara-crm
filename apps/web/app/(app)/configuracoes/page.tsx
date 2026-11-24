@@ -9,6 +9,8 @@ import { ErrorText, Field, Input } from '@/components/ui/form';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api, useAction, useApi } from '@/lib/api';
+import { useMe } from '@/components/access';
+import { HeonImport } from '@/components/heon-import';
 import { dateTime } from '@/lib/format';
 
 const STATUS: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' | 'secondary' }> = {
@@ -472,6 +474,8 @@ function MetaPanel() {
 }
 
 export default function SettingsPage() {
+  const me = useMe();
+  const canImport = !!me?.permissions.includes('users:manage');
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-semibold text-navy-800">Integrações</h1>
@@ -479,6 +483,7 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
           <TabsTrigger value="meta">Meta Ads</TabsTrigger>
+          {canImport && <TabsTrigger value="heon">Importar do Heon</TabsTrigger>}
         </TabsList>
         <TabsContent value="whatsapp">
           <WhatsAppPanel />
@@ -486,6 +491,11 @@ export default function SettingsPage() {
         <TabsContent value="meta">
           <MetaPanel />
         </TabsContent>
+        {canImport && (
+          <TabsContent value="heon">
+            <HeonImport />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

@@ -81,6 +81,7 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
       campaignMetaId: q.campaignMetaId,
       search: q.search,
       openedIn: q.from && q.to ? { from: q.from, to: q.to } : undefined,
+      excludeImported: true,
     };
     const [rows, total] = await Promise.all([c.repos.leads.list({ ...filter, limit: q.limit, offset: q.offset }), c.repos.leads.count(filter)]);
     return { total, items: await present(rows) };
@@ -90,7 +91,7 @@ export function registerLeadRoutes(app: FastifyInstance, c: Container, guard: Gu
   app.get('/funnel/board', { preHandler: guard('leads:read') }, async () => {
     const open = await c.repos.leads.list({ open: true, limit: 500 });
     const since = new Date(Date.now() - 30 * 86_400_000);
-    const closed = (await c.repos.leads.list({ open: false, limit: 500 })).filter((l) => (l.closedAt ?? l.lastActivityAt) >= since);
+    const closed = (await c.repos.leads.list({ open: false, excludeImported: true, limit: 500 })).filter((l) => (l.closedAt ?? l.lastActivityAt) >= since);
     const items = await present([...open, ...closed]);
     return (['NEW', 'CONTACTED', 'SCHEDULED', 'ATTENDED', 'WON', 'LOST'] as const).map((stage) => ({
       stage,

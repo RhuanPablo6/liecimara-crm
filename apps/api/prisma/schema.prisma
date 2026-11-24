@@ -80,6 +80,18 @@ model Contact {
   firstSeenAt       DateTime
   lastMessageAt     DateTime?
   removedFromAppAt  DateTime?
+  /// Cadastro vindo de outro sistema (ex.: "heon:402007"): importação idempotente
+  externalId        String?   @unique
+  importedAt        DateTime?
+  email             String?
+  cpf               String?
+  birthDate         DateTime? @db.Date
+  addressCep        String?
+  addressStreet     String?
+  addressNumber     String?
+  addressDistrict   String?
+  addressCity       String?
+  addressState      String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -260,6 +272,8 @@ model Lead {
   firstResponseAt       DateTime?
   closedAt              DateTime?
   lastActivityAt        DateTime
+  /// Histórico importado de outro sistema: fica fora do funil, dos relatórios de leads e do quadro
+  imported              Boolean               @default(false)
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
@@ -345,6 +359,8 @@ model Appointment {
   confirmationLinkSentAt DateTime?
   status        AppointmentStatus @default(SCHEDULED)
   cancelReason  String?
+  /// Agendamento vindo de outro sistema (ex.: "heon:3373567:2026-08-02T10:30")
+  externalId    String?           @unique
   createdById   String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt

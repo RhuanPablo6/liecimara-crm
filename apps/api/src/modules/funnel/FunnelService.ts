@@ -65,7 +65,8 @@ export class FunnelService {
         adSetMetaId: null,
         campaignMetaId: null,
         attributionEvidenceId: null,
-        originType: input.attribution ? null : (input.origin?.type ?? null),
+        // Paciente do cadastro anterior (Heon) sem origem informada: "Paciente que retornou".
+        originType: input.attribution ? null : (input.origin?.type ?? (contact.externalId ? 'RETURNING' : null)),
         originNote: input.attribution ? null : (input.origin?.note?.trim() || null),
         lostReason: null,
         lostNote: null,

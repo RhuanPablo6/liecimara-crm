@@ -50,8 +50,8 @@ export class MetricsService {
     const [msgs, conversations, leads, appts, salesAll, performed, payments, insights] = await Promise.all([
       r.messages.countIn(range),
       r.conversations.countStartedIn(range),
-      r.leads.list({ openedIn: range, limit: ALL }),
-      r.appointments.listCreatedIn(range),
+      r.leads.list({ openedIn: range, excludeImported: true, limit: ALL }),
+      r.appointments.listCreatedIn(range).then((xs) => xs.filter((a) => !a.externalId)),
       r.sales.listSoldIn(range),
       r.performed.listPerformedIn(range),
       r.payments.listPaidIn(range),
@@ -151,7 +151,7 @@ export class MetricsService {
       r.ads.listCampaigns(),
       r.ads.listAdSets(),
       r.ads.listInsights(range),
-      r.leads.list({ openedIn: range, limit: ALL }),
+      r.leads.list({ openedIn: range, excludeImported: true, limit: ALL }),
       r.sales.listSoldIn(range),
       r.conversations.countStartedByAdIn(range),
     ]);
@@ -159,7 +159,7 @@ export class MetricsService {
     const campaignName = new Map(campaigns.map((c) => [c.metaId, c.name]));
     const adSetName = new Map(adSets.map((a) => [a.metaId, a.name]));
     const apptsByLead = new Map<string, number>();
-    for (const a of await r.appointments.listCreatedIn(range)) {
+    for (const a of (await r.appointments.listCreatedIn(range)).filter((x) => !x.externalId)) {
       if (a.status !== 'CANCELED') apptsByLead.set(a.leadId, (apptsByLead.get(a.leadId) ?? 0) + 1);
     }
 
@@ -229,7 +229,7 @@ export class MetricsService {
   }
 
   async funnel(range: DateRange) {
-    const leads = await this.repos.leads.list({ openedIn: range, limit: ALL });
+    const leads = await this.repos.leads.list({ openedIn: range, excludeImported: true, limit: ALL });
     const reached = (stages: LeadStage[]) => leads.filter((l) => stages.includes(l.stage)).length;
     // "Alcançou a etapa" considera etapas posteriores (um lead vendido também passou por agendado).
     const history = await Promise.all(leads.map((l) => this.repos.stageHistory.listByLead(l.id)));
@@ -268,7 +268,7 @@ export class MetricsService {
 
   async timeseries(range: DateRange) {
     const [leads, sales, insights] = await Promise.all([
-      this.repos.leads.list({ openedIn: range, limit: ALL }),
+      this.repos.leads.list({ openedIn: range, excludeImported: true, limit: ALL }),
       this.repos.sales.listSoldIn(range),
       this.repos.ads.listInsights(range),
     ]);

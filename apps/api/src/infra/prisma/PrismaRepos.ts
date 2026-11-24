@@ -56,6 +56,7 @@ export class PrismaRepos implements Repos {
     findById: async (id: string) => as<any>(await this.db.contact.findUnique({ where: { id } })),
     findByWaId: async (waId: string) => as<any>(await this.db.contact.findUnique({ where: { waId } })),
     findByBsuid: async (bsuid: string) => as<any>(await this.db.contact.findUnique({ where: { bsuid } })),
+    findByExternalId: async (externalId: string) => as<any>(await this.db.contact.findUnique({ where: { externalId } })),
     list: async () => as<any>(await this.db.contact.findMany({ orderBy: { firstSeenAt: 'asc' } })),
     create: async (d: any) => as<any>(await this.db.contact.create({ data: d })),
     update: async (id: string, d: any) => as<any>(await this.db.contact.update({ where: { id }, data: d })),
@@ -118,6 +119,7 @@ export class PrismaRepos implements Repos {
     if (f.campaignMetaId) where.campaignMetaId = f.campaignMetaId;
     if (f.confidence) where.attributionConfidence = f.confidence;
     if (f.openedIn) where.openedAt = inRange(f.openedIn);
+    if (f.excludeImported) where.imported = false;
     if (f.search) {
       const q = f.search.trim();
       const contacts = await this.db.contact.findMany({
@@ -146,7 +148,8 @@ export class PrismaRepos implements Repos {
         }),
       ),
     findLatestByContact: async (contactId: string) =>
-      as<any>(await this.db.lead.findFirst({ where: { contactId }, orderBy: { openedAt: 'desc' } })),
+      as<any>(await this.db.lead.findFirst({ where: { contactId, imported: false }, orderBy: { openedAt: 'desc' } })),
+    findImportedByContact: async (contactId: string) => as<any>(await this.db.lead.findFirst({ where: { contactId, imported: true } })),
     create: async (d: any) => as<any>(await this.db.lead.create({ data: d })),
     update: async (id: string, d: any) => as<any>(await this.db.lead.update({ where: { id }, data: d })),
     list: async (f: LeadFilter) =>
@@ -329,6 +332,7 @@ export class PrismaRepos implements Repos {
 
   appointments = {
     findById: async (id: string) => as<any>(await this.db.appointment.findUnique({ where: { id } })),
+    findByExternalId: async (externalId: string) => as<any>(await this.db.appointment.findUnique({ where: { externalId } })),
     create: async (d: any) => as<any>(await this.db.appointment.create({ data: d })),
     update: async (id: string, d: any) => as<any>(await this.db.appointment.update({ where: { id }, data: d })),
     listByLead: async (leadId: string) => as<any>(await this.db.appointment.findMany({ where: { leadId }, orderBy: { scheduledFor: 'asc' } })),

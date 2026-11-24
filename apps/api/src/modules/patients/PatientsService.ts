@@ -43,10 +43,11 @@ export interface PatientRow {
 }
 
 /** Etiqueta: marcada à mão, ou automática (já comprou → da carteira). */
-export function tagOf(contact: Pick<Contact, 'walletPatient'>, purchasesBefore: number): PatientTag {
+export function tagOf(contact: Pick<Contact, 'walletPatient'> & { externalId?: string | null }, purchasesBefore: number): PatientTag {
   if (contact.walletPatient === true) return 'WALLET';
   if (contact.walletPatient === false) return 'NEW';
-  return purchasesBefore > 0 ? 'WALLET' : 'NEW';
+  // Veio do cadastro do sistema anterior (Heon): já era paciente da clínica.
+  return purchasesBefore > 0 || !!contact.externalId ? 'WALLET' : 'NEW';
 }
 
 const WIDE: DateRange = { from: new Date('2000-01-01T00:00:00Z'), to: new Date('2999-12-31T00:00:00Z') };
@@ -89,11 +90,12 @@ export class PatientsService {
     const rows: PatientRow[] = [];
     for (const c of d.contacts) {
       const leads = (leadsBy.get(c.id) ?? []).sort((a, b) => a.openedAt.getTime() - b.openedAt.getTime());
-      if (!leads.length) continue; // contato sem atendimento (ex.: só importado da agenda)
-      const latest = leads.at(-1)!;
+      // Contato sem atendimento só entra se veio do cadastro de pacientes (importação do Heon).
+      if (!leads.length && !c.externalId) continue;
+      const latest = leads.at(-1) ?? null;
       // Origem: a do primeiro atendimento que tiver origem informada (como a pessoa chegou à clínica).
       const withOrigin = leads.find((l) => originOf(l) !== 'UNKNOWN') ?? latest;
-      const origin = originOf(withOrigin);
+      const origin: OriginType = withOrigin ? originOf(withOrigin) : 'UNKNOWN';
 
       const allSales = (salesBy.get(c.id) ?? []).filter((s) => s.status === 'ACTIVE');
       const sales = allSales.filter((s) => inRange(s.soldAt, range));
@@ -123,11 +125,11 @@ export class PatientsService {
         tagManual: c.walletPatient != null,
         origin,
         originLabel: ORIGIN_LABELS[origin],
-        originNote: withOrigin.originNote ?? null,
-        originAd: withOrigin.adMetaId ? (adName.get(withOrigin.adMetaId) ?? null) : null,
+        originNote: withOrigin?.originNote ?? null,
+        originAd: withOrigin?.adMetaId ? (adName.get(withOrigin.adMetaId) ?? null) : null,
         firstSeenAt: c.firstSeenAt,
         lastActivityAt: leads.reduce<Date | null>((m, l) => later(m, l.lastActivityAt), null),
-        leadId: latest.id,
+        leadId: latest?.id ?? null,
         leadsCount: leads.length,
         appointments: appts.filter((a) => a.status !== 'CANCELED').length,
         attended: attended.length,
@@ -233,6 +235,10 @@ export class PatientsService {
     const events: Event[] = [];
     for (const l of leads) {
       const o = originOf(l);
+      if (l.imported) {
+        events.push({ at: l.openedAt, kind: 'LEAD', title: 'Paciente do Heon (sistema anterior)', detail: 'Agendamentos abaixo vieram da agenda do Heon', leadId: l.id });
+        continue;
+      }
       events.push({
         at: l.openedAt,
         kind: 'LEAD',
@@ -286,6 +292,20 @@ export class PatientsService {
         waId: contact.waId,
         firstSeenAt: contact.firstSeenAt,
         walletPatient: contact.walletPatient ?? null,
+        imported: !!contact.externalId,
+        email: contact.email ?? null,
+        cpf: contact.cpf ?? null,
+        birthDate: contact.birthDate ? contact.birthDate.toISOString().slice(0, 10) : null,
+        address: contact.addressStreet || contact.addressCity || contact.addressCep
+          ? {
+              cep: contact.addressCep ?? null,
+              street: contact.addressStreet ?? null,
+              number: contact.addressNumber ?? null,
+              district: contact.addressDistrict ?? null,
+              city: contact.addressCity ?? null,
+              state: contact.addressState ?? null,
+            }
+          : null,
       },
       summary: row,
       leads: leads.map((l: Lead) => ({

@@ -20,6 +20,7 @@ import { registerIntegrationRoutes } from './routes/integrations.js';
 import { registerLeadRoutes } from './routes/leads.js';
 import { registerPatientRoutes } from './routes/patients.js';
 import { registerRecallRoutes } from './routes/recalls.js';
+import { registerImportRoutes } from './routes/imports.js';
 import { registerPurchaseRoutes } from './routes/purchases.js';
 import { registerReportRoutes } from './routes/reports.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
@@ -102,6 +103,7 @@ export function buildServer(c: Container) {
   registerPatientRoutes(app, c, guard);
   registerAdsManagerRoutes(app, c, guard);
   registerRecallRoutes(app, c, guard);
+  registerImportRoutes(app, c, guard);
   registerAgendaRoutes(app, c, guard);
   registerPublicAppointmentRoutes(app, c);
   registerQuoteRoutes(app, c, guard);

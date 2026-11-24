@@ -58,6 +58,18 @@ export interface Contact {
   firstSeenAt: Date;
   lastMessageAt: Date | null;
   removedFromAppAt: Date | null;
+  /** Cadastro importado de outro sistema (ex.: "heon:402007"). */
+  externalId?: string | null;
+  importedAt?: Date | null;
+  email?: string | null;
+  cpf?: string | null;
+  birthDate?: Date | null;
+  addressCep?: string | null;
+  addressStreet?: string | null;
+  addressNumber?: string | null;
+  addressDistrict?: string | null;
+  addressCity?: string | null;
+  addressState?: string | null;
 }
 
 export interface Conversation {
@@ -154,6 +166,8 @@ export interface Lead {
   firstResponseAt: Date | null;
   closedAt: Date | null;
   lastActivityAt: Date;
+  /** Histórico importado de outro sistema: fora do funil e dos relatórios de leads. */
+  imported?: boolean;
   createdAt: Date;
 }
 
@@ -325,6 +339,8 @@ export interface Appointment {
   confirmationLinkSentAt?: Date | null;
   status: AppointmentStatus;
   cancelReason: string | null;
+  /** Agendamento importado de outro sistema. */
+  externalId?: string | null;
   createdById: string | null;
   createdAt: Date;
 }

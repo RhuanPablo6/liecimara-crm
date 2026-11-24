@@ -531,7 +531,11 @@ function NewAppointment({
             await api('/agenda/appointments', {
               method: 'POST',
               body: {
-                ...(mode === 'existing' ? { leadId: picked.leadId } : { waId, name: name || null, origin: origin ? { type: origin } : null }),
+                ...(mode === 'existing'
+                  ? picked.leadId
+                    ? { leadId: picked.leadId }
+                    : { waId: picked.waId, name: picked.name ?? null } // paciente só do cadastro (Heon): abre o atendimento agora
+                  : { waId, name: name || null, origin: origin ? { type: origin } : null }),
                 procedureId: procedureId || null,
                 scheduledFor: toInstant(day, time),
                 durationMin: Number(duration),

@@ -129,6 +129,7 @@ export default function PatientPage({ params }: { params: Promise<{ id: string }
             {s && <PatientTagControl contactId={contact.id} tag={s.tag} manual={s.tagManual} onChanged={reload} />}
             <MessageButton waId={contact.waId} vars={{ nome: contact.name, procedimento: s?.procedures[0]?.name }} label="Mensagem pronta" />
           </div>
+          <PersonalData contact={contact} />
           {s && (
             <p className="mt-2 text-sm">
               Origem: <b>{s.originLabel}</b>
@@ -262,6 +263,32 @@ export default function PatientPage({ params }: { params: Promise<{ id: string }
           </TabsContent>
         )}
       </Tabs>
+    </div>
+  );
+}
+
+/** Dados do cadastro (vindos do Heon): nascimento, CPF, e-mail e endereço. */
+function PersonalData({ contact }: { contact: any }) {
+  const b: string | null = contact.birthDate;
+  const ad = contact.address;
+  if (!b && !contact.cpf && !contact.email && !ad) return null;
+  let age: number | null = null;
+  if (b) {
+    const [y, m, d] = b.split('-').map(Number);
+    const now = new Date();
+    age = now.getFullYear() - y! - (now.getMonth() + 1 < m! || (now.getMonth() + 1 === m && now.getDate() < d!) ? 1 : 0);
+  }
+  const street = ad ? [ad.street && `${ad.street}${ad.number ? `, ${ad.number}` : ''}`, ad.district, ad.city && `${ad.city}${ad.state ? `/${ad.state}` : ''}`, ad.cep].filter(Boolean).join(' · ') : '';
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+      {b && (
+        <span>
+          Nascimento: {b.split('-').reverse().join('/')} ({age} anos)
+        </span>
+      )}
+      {contact.cpf && <span>CPF: {contact.cpf}</span>}
+      {contact.email && <span>{contact.email}</span>}
+      {street && <span>{street}</span>}
     </div>
   );
 }

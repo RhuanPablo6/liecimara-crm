@@ -149,6 +149,8 @@ export class AttributionEngine {
             adSetMetaId: null,
             campaignMetaId: null,
             attributionEvidenceId: null,
+            // Paciente do cadastro anterior (Heon) voltando a falar com a clínica.
+            ...(contact.externalId ? { originType: 'RETURNING' } : {}),
             lostReason: null,
             lostNote: null,
             openedAt: at,

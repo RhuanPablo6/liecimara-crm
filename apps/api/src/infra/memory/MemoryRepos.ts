@@ -158,6 +158,7 @@ export class MemoryRepos implements Repos {
     findById: async (id: string) => clone(this.s.contacts.get(id) ?? null),
     findByWaId: async (waId: string) => clone([...this.s.contacts.values()].find((c) => c.waId === waId) ?? null),
     findByBsuid: async (b: string) => clone([...this.s.contacts.values()].find((c) => c.bsuid === b) ?? null),
+    findByExternalId: async (x: string) => clone([...this.s.contacts.values()].find((c) => c.externalId === x) ?? null),
     list: async () => clone([...this.s.contacts.values()]),
     create: async (d: Omit<Contact, 'id'>) => insert(this.s.contacts, d, 'ctc_'),
     update: async (id: string, d: Partial<Contact>) => patch(this.s.contacts, id, d),
@@ -229,6 +230,7 @@ export class MemoryRepos implements Repos {
     if (f.campaignMetaId) rows = rows.filter((l) => l.campaignMetaId === f.campaignMetaId);
     if (f.confidence) rows = rows.filter((l) => l.attributionConfidence === f.confidence);
     if (f.openedIn) rows = rows.filter((l) => inRange(l.openedAt, f.openedIn!));
+    if (f.excludeImported) rows = rows.filter((l) => !l.imported);
     if (f.search) {
       const q = f.search.toLowerCase();
       rows = rows.filter((l) => {
@@ -247,10 +249,11 @@ export class MemoryRepos implements Repos {
           .filter((l) => l.contactId === contactId && OPEN_STAGES.includes(l.stage))
           .sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime())[0] ?? null,
       ),
+    findImportedByContact: async (contactId: string) => clone([...this.s.leads.values()].find((l) => l.contactId === contactId && l.imported) ?? null),
     findLatestByContact: async (contactId: string) =>
       clone(
         [...this.s.leads.values()]
-          .filter((l) => l.contactId === contactId)
+          .filter((l) => l.contactId === contactId && !l.imported)
           .sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime())[0] ?? null,
       ),
     create: async (d: Omit<Lead, 'id'>) => insert(this.s.leads, d, 'led_'),
@@ -336,6 +339,7 @@ export class MemoryRepos implements Repos {
 
   appointments = {
     findById: async (id: string) => clone(this.s.appointments.get(id) ?? null),
+    findByExternalId: async (x: string) => clone([...this.s.appointments.values()].find((a) => a.externalId === x) ?? null),
     create: async (d: Omit<Appointment, 'id'>) => insert(this.s.appointments, d, 'apt_'),
     update: async (id: string, d: Partial<Appointment>) => patch(this.s.appointments, id, d),
     listByLead: async (leadId: string) => clone([...this.s.appointments.values()].filter((a) => a.leadId === leadId)),

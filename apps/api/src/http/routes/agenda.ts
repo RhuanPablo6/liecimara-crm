@@ -203,11 +203,16 @@ export function registerAgendaRoutes(app: FastifyInstance, c: Container, guard: 
     } else {
       const lead = await c.repos.leads.findById(leadId);
       if (!lead) throw new DomainError('NOT_FOUND', 'Paciente não encontrada', 404);
-      if (lead.stage === 'LOST') {
-        // Lead perdido: abre um novo atendimento para a mesma paciente.
+      if (lead.stage === 'LOST' || lead.imported) {
+        // Lead perdido (ou histórico importado do Heon): abre um novo atendimento para a mesma paciente.
         const contact = await c.repos.contacts.findById(lead.contactId);
-        const created = await c.funnel.createLeadManually({ waId: contact!.waId!, procedureInterestId: b.procedureId ?? null }, actor);
-        leadId = created.id;
+        const open = await c.repos.leads.findOpenByContact(lead.contactId);
+        if (open && !open.imported) leadId = open.id;
+        else {
+          if (!contact?.waId) throw new DomainError('VALIDATION', 'Esta paciente está sem WhatsApp no cadastro: agende como paciente nova informando o número');
+          const created = await c.funnel.createLeadManually({ waId: contact.waId, procedureInterestId: b.procedureId ?? null }, actor);
+          leadId = created.id;
+        }
       }
     }
     const created = await c.funnel.scheduleAppointment(leadId, { scheduledFor: b.scheduledFor, procedureId: b.procedureId ?? null, durationMin: b.durationMin, notes: b.notes ?? null }, actor);

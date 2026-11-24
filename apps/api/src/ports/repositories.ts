@@ -57,6 +57,7 @@ export interface ContactRepo {
   findById(id: string): Promise<Contact | null>;
   findByWaId(waId: string): Promise<Contact | null>;
   findByBsuid(bsuid: string): Promise<Contact | null>;
+  findByExternalId(externalId: string): Promise<Contact | null>;
   list(): Promise<Contact[]>;
   create(data: Create<Contact>): Promise<Contact>;
   update(id: string, data: Partial<Contact>): Promise<Contact>;
@@ -87,6 +88,8 @@ export interface LeadFilter {
   campaignMetaId?: string;
   confidence?: Lead['attributionConfidence'];
   openedIn?: DateRange;
+  /** Sem o histórico importado de outro sistema (funil, relatórios e quadro). */
+  excludeImported?: boolean;
   search?: string;
   limit?: number;
   offset?: number;
@@ -95,7 +98,10 @@ export interface LeadFilter {
 export interface LeadRepo {
   findById(id: string): Promise<Lead | null>;
   findOpenByContact(contactId: string): Promise<Lead | null>;
+  /** Atendimento mais recente (sem o histórico importado). */
   findLatestByContact(contactId: string): Promise<Lead | null>;
+  /** Lead que guarda o histórico importado da paciente (um por contato). */
+  findImportedByContact(contactId: string): Promise<Lead | null>;
   create(data: Create<Lead>): Promise<Lead>;
   update(id: string, data: Partial<Lead>): Promise<Lead>;
   list(filter: LeadFilter): Promise<Lead[]>;
@@ -151,6 +157,7 @@ export interface ProcedureRepo {
 
 export interface AppointmentRepo {
   findById(id: string): Promise<Appointment | null>;
+  findByExternalId(externalId: string): Promise<Appointment | null>;
   create(data: Create<Appointment>): Promise<Appointment>;
   update(id: string, data: Partial<Appointment>): Promise<Appointment>;
   listByLead(leadId: string): Promise<Appointment[]>;
